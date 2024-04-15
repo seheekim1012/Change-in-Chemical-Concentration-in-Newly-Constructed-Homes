@@ -1,0 +1,134 @@
+---
+title: "Line plots comparison between different building materials"
+author: "You Peng"
+date: '2023-11-10'
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+concentration_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", skip = 4)
+tech_survey_data = read_excel("20231027 Technician Survey Data.xlsx")
+```
+
+```{r}
+concentration_data
+```
+
+
+```{r}
+tech_survey_data
+```
+
+```{r}
+tech_survey_data <- tech_survey_data %>% select(id, base_ac_yn, heating_type, cellulose_ins_yn, Styrofoam_ins_yn, fiberglass_ins_yn, sprayfoam_ins_yn, base_ij_osb_yn, ukc1_mat, lkc_mat, hrv_on_yn)
+```
+
+```{r}
+full_data = merge(concentration_data, tech_survey_data, by.x = 'House_ID', by.y='id')
+full_data
+```
+
+
+```{r}
+library(ggplot2)
+
+# filter to only for the houses
+full_data <- full_data[c(1:33), ]
+
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, Period == "9 month" ~ 9))
+
+full_data
+
+
+# ggplot(full_data, aes(x = Period, y = DEP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+#   geom_line() +
+#   labs(x = "Month", y = "Concentration", color = "House ID") +
+#   ggtitle("Concentration versus Month for Different Homes")
+
+```
+Only houses with id 1 to 3 has a complete data for month from month 0 to 9, while id 6 and id 8 have data from month 0 to 6.
+
+
+```{r}
+
+data_complete_month = full_data %>% filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003" | House_ID == "NHAQS-006" | House_ID == "NHAQS-008")
+
+## Plot the graph of the houses with complete data
+p = ggplot(data_complete_month, aes(x = Period, y = DEP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DEP versus Month for Different Homes with corresponding usage of air conditioning")
+
+## Added the date on the 0 month
+start_date_data <- data_complete_month[data_complete_month$Period == 0,]
+
+p + geom_text(
+  aes(label = `Start date (yyyy-mm-dd)`),
+  data = start_date_data,
+  hjust = 0,  # Adjust the horizontal position of the label
+  vjust = 1,  # Adjust the vertical position of the label
+  show.legend = FALSE
+)
+```
+The start date of the houses did not seem to be a factor for the difference in the trend.
+
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = DPP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DPP versus Month for Different Homes")
+```
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = DiBP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DiBP versus Month for Different Homes")
+```
+
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = DnBP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air conditioning") +
+  ggtitle("DnBP versus Month for Different Homes")
+```
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = BzBP, group = House_ID)) +
+  geom_line(aes(linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9)) +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("BzBP versus Month for Different Homes")
+```
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = DEHP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DEHP versus Month for Different Homes")
+```
+
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = DnOP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DnOP versus Month for Different Homes")
+```
+
+
+```{r}
+ggplot(data_complete_month, aes(x = Period, y = DiNP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DiNP versus Month for Different Homes")
+```
+
+

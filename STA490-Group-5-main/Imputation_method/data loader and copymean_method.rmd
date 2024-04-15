@@ -1,0 +1,72 @@
+
+---
+title: "sta490"
+output: html_document
+date: '2024-2-9'
+---
+
+## data Loader and copymean imuputation
+
+```{r}
+install.packages('janitor')
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+```
+```{r}
+data <- read_excel("../data/NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Passive air- PUF(pgm-3)",
+                         range = "A5:Z38")
+data <- data %>% 
+  clean_names() %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0,
+    period == "3 month" ~ 3,
+    period == "6 month" ~ 6,
+    TRUE ~ 9
+  ))
+
+survey_data <- read_excel("../data/20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn,dogcat_yn)
+selected_survey_data <- survey_data[1:44,]
+
+merge_data = merge(data, selected_survey_data, by.x = 'house_id', by.y='id')
+full_data_byhouse <- merge_data %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+```
+
+```{r}
+data_loader <- function(chemical_name, house_id, data_df) {
+  # Filter data for the specified house_id and chemical_name
+  filtered_data <- data_df[data_df$house_id == house_id, ]
+  concentration_vector <- numeric(length = 4)  # Initialize vector to store concentrations
+  
+  for (period in c(0, 3, 6, 9)) {
+    if (any(filtered_data$period == period)) {
+      concentration <- filtered_data[filtered_data$period == period, ][[chemical_name]]
+      concentration_vector[which(period == c(0, 3, 6, 9))] <- concentration
+    } 
+    else {
+      concentration_vector[which(period == c(0, 3, 6, 9))] <- NA  
+    }
+  }
+  
+  return(concentration_vector)
+}
+```
+
+```{r}
+copymean_imputation <- function(yn){
+  first_NA_i <- which(is.na(yn))[1]
+  if (is.na(first_NA_i)){
+    return (yn)
+  }
+  else {
+    for (i in (first_NA_i:4)){
+      yn[i] <- mean(yn[1:(first_NA_i-1)])
+    }
+    return (yn)
+  }
+  }
+```

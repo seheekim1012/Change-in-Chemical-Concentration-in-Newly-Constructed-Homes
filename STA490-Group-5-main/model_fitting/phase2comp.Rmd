@@ -1,0 +1,297 @@
+---
+title: "Phase 2 complete cases"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+  pdf_document:
+    toc: true
+---
+
+## Data Set up
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(mice)
+library(mitml)
+library(jomo)
+library(mitools)
+library(miceadds)
+library(ggmice)
+library(gt)
+library(gtExtras)
+library(broom.mixed)
+library(ggpubr)
+library(lmtest)
+library(naniar)
+set.seed(1012)
+```
+
+# Phase 2
+
+## Data set-up
+```{r Data set up for phase 2, warning=FALSE}
+# phase 2 including all the houses 
+phase2_raw <- read_excel("NewHomeStudy-Phthalates-March03-Sara.V-edited.xlsx", 
+                      sheet = "Passive Air - PDMS (pg.m-3)",
+                      range = "A1:J125")
+# phase 2 including houses with only complete cases 
+phase2_full <- read_excel("NewHomeStudy-Phthalates-March03-Sara.V-edited.xlsx", 
+                      sheet = "full_data",
+                      range = "A1:J69")
+
+phase2 <- phase2_raw %>%  
+  complete(nesting(House_ID), Period = seq(min(Period), max(Period),3), explicit = FALSE) %>% # Put NAs in the missing concentration
+  group_by(House_ID) %>% 
+  # the concentration of chemicals are logged 
+  mutate(DEP = ifelse(DEP == "<DL", log(50), log(as.numeric(DEP))), # replace DL with the limit value 
+         DPP = ifelse(DPP == "<DL", log(101), log(as.numeric(DPP))),
+         DiBP = ifelse(DiBP == "<DL", log(80), log(as.numeric(DiBP))),
+         DnBP = ifelse(DnBP == "<DL", log(103), log(as.numeric(DnBP))),
+         BzBP = ifelse(BzBP == "<DL", log(87), log(as.numeric(BzBP))),
+         DEHP = ifelse(DEHP == "<DL", log(75),log(as.numeric(DEHP))),
+         DnOP = ifelse(DnOP == "<DL", log(69), log(as.numeric(DnOP))),
+         DiNP = ifelse(DiNP == "<DL", log(102), log(as.numeric(DiNP))))
+
+phase2_full <- phase2_full %>% # data with full period
+  mutate(DEP = ifelse(DEP == "<DL", log(50), log(as.numeric(DEP))),
+         DPP = ifelse(DPP == "<DL", log(101), log(as.numeric(DPP))),
+         DiBP = ifelse(DiBP == "<DL", log(80), log(as.numeric(DiBP))),
+         DnBP = ifelse(DnBP == "<DL", log(103), log(as.numeric(DnBP))),
+         BzBP = ifelse(BzBP == "<DL", log(87), log(as.numeric(BzBP))),
+         DEHP = ifelse(DEHP == "<DL", log(75),log(as.numeric(DEHP))),
+         DnOP = ifelse(DnOP == "<DL", log(69), log(as.numeric(DnOP))),
+         DiNP = ifelse(DiNP == "<DL", log(102), log(as.numeric(DiNP))))
+
+phase2 <-merge(phase2,build_mat,by.x = 'House_ID', by.y='id')
+phase2 <-merge(phase2,tech_survey_data,by.x = 'House_ID', by.y='id')
+phase2_full <-merge(phase2_full, build_mat, by.x = 'House_ID', by.y='id')
+phase2_full <- merge(phase2_full, tech_survey_data, by.x = 'House_ID', by.y='id')
+phase2_full_9months <- phase2_full[!(phase2_full$Period %in% 12),] # complete dataset untill 9 months 
+phase2_9months <- phase2[!(phase2$Period %in% 12),] # data until 9month 
+# houses with complete casesw until 12 month 
+phase2_full_12months <- phase2_full %>% 
+  filter(House_ID %in% c("NHAQS-028", "NHAQS-029", "NHAQS-030", "NHAQS-031", "NHAQS-032", "NHAQS-034","NHAQS-035","NHAQS-036"))
+
+```
+
+```{r}
+head(phase2_full_9months)
+phase2_full_9months %>% 
+  ggplot(aes(x = Period, y = DEP, color = House_ID)) +
+  geom_point()
+
+phase2_full_9months %>% 
+  group_by(House_ID, base_ac_yn) %>% 
+  summarise() %>% 
+  ggplot(aes(as.factor(base_ac_yn))) +
+  geom_bar(fill = "#64918a")+
+  ggtitle("Count of base_ac_yn in phase 2 complete data")
+
+phase2_full_9months %>% 
+  group_by(House_ID, low_VOC_home) %>% 
+  summarise() %>% 
+  ggplot(aes(low_VOC_home)) +
+  geom_bar(fill = "#64918a")+
+  ggtitle("Count of low_VOC_home in phase 2 complete data")
+
+phase2_full_9months %>% 
+  group_by(House_ID, paints_yn) %>% 
+  summarise() %>% 
+  ggplot(aes(paints_yn)) +
+  geom_bar()
+
+```
+
+
+```{r DEP likelihood test}
+mod_DEP_paints <- lmer(DEP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months)
+mod_DEP <- lmer(DEP ~ Period + (1|House_ID), data = phase2_full_9months) 
+mod_DEP_low <- lmer(DEP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)
+mod_DEP_full <- lmer(DEP ~ Period + low_VOC_home + paints_yn + base_ac_yn+ (1|House_ID), data = phase2_full_9months)
+
+mod_DEP_ac <-lmer(DEP ~ Period + base_ac_yn  +( 1|House_ID), data = phase2_full_9months) #best
+
+mod_DEP_full <-lmer(DEP ~ Period + base_ac_yn:low_VOC_home  +( 1|House_ID), data = phase2_full_9months) #best
+lrtest.default(mod_DEP_ac,mod_DEP)
+lrtest.default(mod_DEP,mod_DEP_low)
+lrtest.default(mod_DEP,mod_DEP_paints)
+
+deptest3 <- summary(mod_DEP)
+```
+
+```{r DPP likelihood test}
+mod_DPP <- lmer(DPP ~ Period + (1|House_ID), data = phase2_full_9months)  # best model according to lrtest
+mod_DPP_paints <- lmer(DPP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months)
+mod_DPP_low <- lmer(DPP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months) 
+mod_DPP_full <- lmer(DPP ~ Period + paints_yn +low_VOC_home+ base_ac_yn + (1|House_ID), data = phase2_full_9months)
+mod_DPP_full2 <- lmer(DPP ~ Period + paints_yn +low_VOC_home + (1|House_ID), data = phase2_full_9months)
+mod_DPP_ac <-lmer(DPP ~ Period + base_ac_yn + (1|House_ID), data = phase2_full_9months)
+# singularity error in all models 
+
+#lrtest.default(mod_DPP,mod_DPP_full2)
+lrtest.default(mod_DPP,mod_DPP_ac)
+lrtest.default(mod_DPP,mod_DPP_low)
+lrtest.default(mod_DPP,mod_DPP_paints)
+dpptest3 <- summary(mod_DPP)
+```
+
+```{r DiBP likelihood test}
+mod_DiBP <- lmer(DiBP ~ Period + (1|House_ID), data = phase2_full_9months)
+mod_DiBP_paints <- lmer(DiBP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months) 
+mod_DiBP_low <- lmer(DiBP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)  
+mod_DiBP_full <- lmer(DiBP ~ Period + paints_yn +low_VOC_home+ base_ac_yn+(1|House_ID), data = phase2_full_9months)
+mod_DiBP_ac <- lmer(DiBP ~ Period + base_ac_yn+(1|House_ID), data = phase2_full_9months)
+mod_DiBP_full2 <- lmer(DiBP ~ Period + base_ac_yn +low_VOC_home+(1|House_ID), data = phase2_full_9months)
+summary(mod_DiBP_full) # best model according to lrtest
+lrtest.default(mod_DiBP,mod_DiBP_ac)
+lrtest.default(mod_DiBP,mod_DiBP_low)
+lrtest.default(mod_DiBP,mod_DiBP_paints)
+lrtest.default(mod_DiBP,mod_DiBP_full2)
+dibptest3 <- summary(mod_DiBP)
+```
+
+```{r DnBP likelihood test}
+mod_DnBP <- lmer(DnBP ~ Period + (1|House_ID), data = phase2_full_9months) # best model according to lrtest
+mod_DnBP_paints <- lmer(DnBP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months) 
+mod_DnBP_low <- lmer(DnBP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)  
+mod_DnBP_full <- lmer(DnBP ~ Period + paints_yn +low_VOC_home+ base_ac_yn+ (1|House_ID), data = phase2_full_9months)
+mod_DnBP_ac <- lmer(DnBP ~ Period + base_ac_yn + (1|House_ID), data = phase2_full_9months)  
+lrtest.default(mod_DnBP,mod_DnBP_ac)
+lrtest.default(mod_DnBP,mod_DnBP_low)
+lrtest.default(mod_DnBP,mod_DnBP_paints)
+#lrtest.default(mod_DnBP,mod_DnBP_paints)
+dnbptest3 <- summary(mod_DnBP)
+```
+
+```{r BzBP likelihood test}
+
+mod_BzBP <- lmer(BzBP ~ Period + (1|House_ID), data = phase2_full_9months) # best model according to lrtest
+mod_BzBP_paints <- lmer(BzBP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months) 
+mod_BzBP_low <- lmer(BzBP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)  
+mod_BzBP_full <- lmer(BzBP ~ Period + paints_yn +low_VOC_home+ base_ac_yn+(1|House_ID), data = phase2_full_9months)
+mod_BzBP_ac <- lmer(BzBP ~ Period + base_ac_yn + (1|House_ID), data = phase2_full_9months)  
+lrtest.default(mod_BzBP,mod_BzBP_ac)
+lrtest.default(mod_BzBP,mod_BzBP_low)
+lrtest.default(mod_BzBP,mod_BzBP_paints)
+bzbptest3 <- summary(mod_BzBP)
+```
+
+```{r DEHP likelihod test}
+mod_DEHP <- lmer(DEHP ~ Period + (1|House_ID), data = phase2_full_9months) # best model according to lrtest
+mod_DEHP_paints <- lmer(DEHP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months) 
+mod_DEHP_low <- lmer(DEHP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)  
+mod_DEHP_ac <- lmer(DEHP ~ Period + base_ac_yn + (1|House_ID), data = phase2_full_9months)
+mod_DEHP_full <- lmer(DEHP ~ Period + paints_yn +low_VOC_home+ base_ac_yn + (1|House_ID), data = phase2_full_9months)
+
+#singularity error 
+
+lrtest.default(mod_DEHP,mod_DEHP_ac)
+lrtest.default(mod_DEHP,mod_DEHP_low)
+lrtest.default(mod_DEHP,mod_DEHP_paints)
+dehptest3 <- summary(mod_DEHP)
+```
+
+```{r DnOP likelihood test}
+mod_DnOP <- lmer(DnOP ~ Period + (1|House_ID), data = phase2_full_9months) 
+mod_DnOP_paints <- lmer(DnOP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months) 
+mod_DnOP_low <- lmer(DnOP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)  
+mod_DnOP_ac <- lmer(DnOP ~ Period + base_ac_yn + (1|House_ID), data = phase2_full_9months)
+mod_DnOP_full <- lmer(DnOP ~ Period + paints_yn + low_VOC_home + base_ac_yn+ (1|House_ID), data = phase2_full_9months)
+
+BIC(mod_DnOP, mod_DnOP_full)
+lrtest.default(mod_DnOP,mod_DnOP_ac)
+lrtest.default(mod_DnOP,mod_DnOP_low)
+lrtest.default(mod_DnOP,mod_DnOP_paints)
+dnoptest3 <- summary(mod_DnOP)
+```
+
+```{r}
+mod_DiNP <- lmer(DiNP ~ Period + (1|House_ID), data = phase2_full_9months) # best model 
+mod_DiNP_paints <- lmer(DiNP ~ Period + paints_yn + (1|House_ID), data = phase2_full_9months) 
+mod_DiNP_low <- lmer(DiNP ~ Period + low_VOC_home + (1|House_ID), data = phase2_full_9months)  
+mod_DiNP_ac <- lmer(DiNP ~ Period + base_ac_yn + (1|House_ID), data = phase2_full_9months)
+mod_DiNP_full <- lmer(DiNP ~ Period + paints_yn + low_VOC_home + base_ac_yn+ (1|House_ID), data = phase2_full_9months)
+
+lrtest.default(mod_DiNP,mod_DiNP_ac)
+lrtest.default(mod_DiNP,mod_DiNP_low)
+lrtest.default(mod_DiNP,mod_DiNP_paints)
+
+dinptest3 <- summary(mod_DiNP)
+```
+
+## Results 
+```{r}
+# estimate of the estimate
+imp3<- gt(tibble(Chemicals = c("DEP","DPP","DiBP","DnBP","BzBP", "DEHP","DnOP","DiNP"),
+                   Estimate = c(deptest3$coefficients[2],
+                                dpptest3$coefficients[2],
+                                dibptest3$coefficients[2],
+                                dnbptest3$coefficients[2],
+                                bzbptest3$coefficients[2],
+                                dehptest3$coefficients[2],
+                                dnoptest3$coefficients[2],
+                                dinptest3$coefficients[2]
+                                ),
+                   Std.Error = c(deptest3$coefficients[4],
+                                 dpptest3$coefficients[4],
+                                 dibptest3$coefficients[4],
+                                 dnbptest3$coefficients[4],
+                                 bzbptest3$coefficients[4],
+                                 dehptest3$coefficients[4],
+                                 dnoptest3$coefficients[4],
+                                 dinptest3$coefficients[4]
+                                 ),
+                   pvalue = c(deptest3$coefficients[10],
+                              dpptest3$coefficients[10],
+                              dibptest3$coefficients[10],
+                              dnbptest3$coefficients[10],
+                              bzbptest3$coefficients[10],
+                              dehptest3$coefficients[10],
+                              dnoptest3$coefficients[10], 
+                              dinptest3$coefficients[10]
+                              )))
+
+imp3 <- imp3 %>% 
+  tab_header(title = "Model results of phase 2 complete data", subtitle = "Period estimates") %>% 
+  gt_highlight_rows(
+    rows = pvalue <= 0.05,# a logic statement
+    fill = "grey",
+    bold_target_only = TRUE,
+    target_col = Chemicals
+    ) %>% 
+  fmt_number(decimals = 2, n_sigfig = 2) %>% 
+  fmt_scientific(columns = pvalue, rows = pvalue <= 0.001)
+
+# DiBP with covariates results 
+dibp_full <- gt(tibble(predictors = c("(Intercept)","Period","low_VOC_home0", "low_VOC_home1", "base_ac_yn"),
+                   Estimate = c(summary(mod_DiBP_full2)$coefficients[1],summary(mod_DiBP_full2)$coefficients[2],
+                                summary(mod_DiBP_full2)$coefficients[3],summary(mod_DiBP_full2)$coefficients[4],
+                                summary(mod_DiBP_full2)$coefficients[5]
+                                ),
+                   Std.Error = c(summary(mod_DiBP_full2)$coefficients[6],summary(mod_DiBP_full2)$coefficients[7],
+                                 summary(mod_DiBP_full2)$coefficients[8], summary(mod_DiBP_full2)$coefficients[9],
+                                 summary(mod_DiBP_full2)$coefficients[10]
+                                 
+                                 ),
+                   pvalue = c(summary(mod_DiBP_full2)$coefficients[21],summary(mod_DiBP_full2)$coefficients[22],
+                              summary(mod_DiBP_full2)$coefficients[23],summary(mod_DiBP_full2)$coefficients[24],
+                              summary(mod_DiBP_full2)$coefficients[25]
+                              )))
+dibp_full <- dibp_full %>% 
+  tab_header(title = "Modelling DiBP") %>% 
+  fmt_number(decimals = 2, n_sigfig = 2)
+
+
+````

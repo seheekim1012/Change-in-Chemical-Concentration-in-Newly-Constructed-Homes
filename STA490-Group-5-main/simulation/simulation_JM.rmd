@@ -1,0 +1,154 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(jomo)
+library(mitml)
+library(mitools)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+```
+
+```{r, echo = FALSE}
+### Pseudo Algorithm
+
+set.seed(1234)
+
+### Fix parameters
+#DiNP
+alpha0 = 9.8
+sigma_b0 = 0.3^2
+beta1 = 0.2 # Set-up 1
+sigma2 = 1.1
+#DPP
+alpha0 = 6.68
+sigma_b0 = 0.247^2
+beta1 = 0.0626
+sigma2 = 0.68
+#DiBP
+alpha0 = 10.837
+sigma_b0 = 0.168^2
+beta1 = -0.006
+sigma2 = 0.5004
+
+### Set up no. of simulations
+nsim = 1000 # Start with 10, see if everything works, then do 1000
+nsample = 14
+### Store sim. (full) data sets 
+sim_data = list()
+time = c(0, 3, 6, 9)
+nt = 4
+
+house_id <- c("house_1","house_2","house_3","house_4","house_5",
+                     "house_6","house_7","house_8","house_9","house_10",
+                     "house_11","house_12","house_13","house_14")
+period <- c(0,3,6,9)
+```
+
+```{r}
+### Simulate data sets
+
+for(m in 1:nsim){
+  dm = matrix(NA, nrow  = nsample, ncol = nt)
+  # Simulate beta0 
+  # For each house, generate y
+  for(i in 1:nsample){
+    e_ij = rnorm(nt, sd = sqrt(sigma2))
+    beta0_i = rnorm(1, mean  = alpha0, sd = sqrt(sigma_b0)) 
+    yi = beta0_i + beta1*time + e_ij
+    dm[i, ] = yi 
+  }
+  sim_data[[m]] = data.frame(house_id, cbind(dm))
+  colnames(sim_data[[m]]) <- c("house_id",0,3,6,9)
+  
+
+}
+```
+
+## Fill in code below
+```{r, echo = FALSE}
+# For each data set remove observations
+missing_sim_data = list()
+dd = 1
+
+for (dataset in sim_data){
+  dataset[4,4] = NA
+  dataset[5,2:4] = NA
+  dataset[6,4] = NA
+  dataset[7,3:4] = NA
+  dataset[8,3:4] = NA
+  dataset[9,3:4] = NA
+  dataset[10,3:4] = NA
+  dataset[11,3:4] = NA
+  dataset[12,2:4] = NA
+  dataset[13,2:4] = NA
+  dataset[14,2:4] = NA
+  missing_sim_data[[dd]] = dataset
+  
+  dd = dd +1}
+
+missing_sim_data_t = list()
+ddd = 1
+for (dataset in missing_sim_data) {
+  missing_sim_data_t [[ddd]] <- pivot_longer(dataset, cols = -house_id, names_to = "period", values_to = "conc" )
+  ddd = ddd+1
+}
+
+```
+
+# Extract beta1 (1000 for each imputation method)
+```{r message=FALSE, warning=FALSE, include=FALSE}
+lvl <- c(house_id = 1, period = 1, conc =1)
+df_DiBP <- data.frame(results = integer(),
+                 se = integer(),
+                 X.lower =integer(),
+                 upper. = integer(),
+                 missInfo = character())
+
+for (dataset in missing_sim_data_t) {
+  dataset <-dataset %>% 
+    mutate(period = as.numeric(period)) 
+  imp_jomo <- jomo.lmer(conc ~ period + (1|house_id),
+                      level = lvl, meth = "common",
+                      data = dataset, nburn = 3000, nbetween = 100, nimp = 5)
+  imp.list <- imputationList(split(imp_jomo, imp_jomo$Imputation))
+  fit.imp <- with(data = imp.list, lmer(conc~period+(1|clus)))
+  coefs <- MIextract(fit.imp, fun = fixef) 
+  vars <- MIextract(fit.imp, fun = function(x) diag(vcov(x)))
+  mse <- MIextract(fit.imp, fun= function (x) (mean(residuals(x)^2)))
+  results <- data.frame(summary(MIcombine(coefs, vars)))
+  df_DiBP <- rbind(df_DiBP, results)
+}
+
+row_odd <- seq_len(nrow(df_DiBP)) %% 2 
+slope_DiBP <- df_DiBP[row_odd ==0,]
+ci_DiBP <- 0
+
+for (i in 1:1000) {
+  if (slope_DiBP$X.lower[i] <= beta1 & slope_DiBP$upper.[i] >= beta1) {
+    ci_DiBP <- ci_DiBP + 1
+  }
+}
+
+```
+
+```{r}
+ci_DiBP / 10
+png("sim2.png")
+boxplot(slope$results, main = "Distribution of slope in 2nd simulation")
+dev.off()
+```
+

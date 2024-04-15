@@ -1,0 +1,534 @@
+---
+title: "sim_for_fcs"
+output: pdf_document
+date: "2024-03-07"
+---
+
+```{r}
+### Pseudo Algorithm
+
+set.seed(1234)
+
+### Fix parameters
+alpha0 = 10.5
+sigma_b0 = 0.2^2
+beta1 = 0 # Set-up 1
+sigma2 = 1.4
+
+### Set up no. of simulations
+nsim = 1000 # Start with 10, see if everything works, then do 1000
+nhouse = 15
+### Store sim. (full) data sets 
+sim_data = list()
+time = c(0, 3, 6, 9)
+nt = 4
+### Simulate data sets
+
+for(m in 1:nsim){
+  dm = matrix(NA, nrow  = nhouse, ncol = nt)
+  # Simulate beta0 
+  
+  # For each house, generate y
+  for(i in 1:nhouse){
+    e_ij = rnorm(nt, sd = sqrt(sigma2))
+    beta0_i = rnorm(1, mean  = alpha0, sd = sqrt(sigma_b0)) 
+    yi = beta0_i + beta1*time + e_ij
+    dm[i, ] = yi 
+  }
+  sim_data[[m]] = dm
+
+}
+
+
+## Fill in code below
+
+# For each data set remove observations
+missing_sim_data = list()
+dd = 1
+
+for (dataset in sim_data){
+  dataset[4,4] = NA
+  dataset[5,2:4] = NA
+  dataset[6,4] = NA
+  dataset[7,3:4] = NA
+  dataset[8,3:4] = NA
+  dataset[9,3:4] = NA
+  dataset[10,3:4] = NA
+  dataset[11,3:4] = NA
+  dataset[12,2:4] = NA
+  dataset[13,2:4] = NA
+  dataset[14,2:4] = NA
+  missing_sim_data[[dd]] = dataset
+  dd = dd +1
+}
+
+# !!! exact same missing data pattern for each sim. data set
+
+# Then impute each data set using 5 diff methods
+imp_sim_data_1 = list()
+imp_sim_data_2 = list()
+imp_sim_data_3 = list()
+imp_sim_data_4 = list()
+
+```
+
+```{r}
+library(reshape2)
+# Convert matrix to dataframe with rows and columns as variables
+fcs_method_data = list()
+dd = 1
+for (m in missing_sim_data) {
+  DEP <- reshape2::melt(m)
+  colnames(DEP) <- c("House_ID", "Period", "DEP")
+  fcs_method_data[[dd]] = DEP
+  dd = dd + 1
+}
+```
+
+```{r,warning=FALSE, message=FALSE, echo=FALSE}
+# Fit model
+slope_ci_lst = list()
+library(mice)
+library(micemd)
+library(miceadds)
+library(nlme)
+library(geepack)
+m = fcs_method_data[[1]]
+best_models_dep = list()
+index = 1
+for (m in fcs_method_data) {
+  vars <- colnames(m)
+  V <- length(vars) # Number of variables
+  
+  # Initialize predictor matrix (adjust based on actual variables and their relationships)
+  predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+  diag(predmat) <- 0
+  rownames(predmat) <- vars
+  colnames(predmat) <- vars
+  predmat["DEP", "House_ID"] <- -2
+  
+  # Define imputation methods 
+  impmeth <- rep("pmm", V)
+  names(impmeth) <- vars
+  impmeth["DEP"] <- "2l.continuous"
+  
+  m <- complete(mice(data=m, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+  
+  # Convert DEP to character to accommodate both numeric values and "DL"
+  m$DEP <- as.character(m$DEP)
+  
+  # Replace values below 99 with "DL"
+  
+  # Filter out rows where DEP is "DL"
+  
+  split_datasets <- split(m, m$.imp)
+  
+  models <- list()
+  
+  # Loop through each split dataset
+  for (imp_value in names(split_datasets)) {
+    # Extract the current dataset
+    current_dataset <- split_datasets[[imp_value]]
+    
+    # Fit the linear mixed model
+    # Assuming 'Period' and other relevant independent variables are in your dataset
+    # Adjust the formula as necessary to include the correct independent variables
+    model <- lmer(log(as.numeric(DEP)) ~ Period + (1|House_ID), data = current_dataset)
+    
+    # Store the model in the models list, naming it by the .imp value
+    models[[imp_value]] <- model
+  }
+  
+  # Accessing a specific model
+  # For example, to access the model for .imp = 1
+  model_imp_1 <- models[['1']]
+  model_imp_2 <- models[['2']]
+  model_imp_3 <- models[['3']]
+  model_imp_4 <- models[['4']]
+  model_imp_5 <- models[['5']]
+  
+  # Summary of the model
+  
+  # Get the residuals from the model
+  residuals_1 <- residuals(model_imp_1)
+  # Calculate Mean Squared Error (MSE)
+  mse1 <- mean(residuals_1^2)
+  
+  residuals_2 <- residuals(model_imp_2)
+  # Calculate Mean Squared Error (MSE)
+  mse2 <- mean(residuals_2^2)
+  
+  residuals_3 <- residuals(model_imp_3)
+  # Calculate Mean Squared Error (MSE)
+  mse3 <- mean(residuals_3^2)
+  
+  residuals_4 <- residuals(model_imp_4)
+  # Calculate Mean Squared Error (MSE)
+  mse4 <- mean(residuals_4^2)
+  
+  residuals_5 <- residuals(model_imp_4)
+  # Calculate Mean Squared Error (MSE)
+  mse5 <- mean(residuals_4^2)
+  
+  # Find out the best model among the imputed model from fcs
+  if (mse1 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_1
+  } else if (mse2 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_2
+  } else if (mse3 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_3
+  } else if (mse4 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_4
+  } else if (mse5 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_5
+  }
+  
+  best_models_dep[[index]] = best_model
+  
+  index = index + 1
+  
+  # Obtain confidence intervals for coefficients
+  conf_interval <- confint(best_model)
+  # Extract confidence interval for slope
+  slope_ci <- conf_interval["Period", ]
+  slope_ci_tuple <- c(slope_ci[[1]], slope_ci[[2]])
+  
+  slope_ci_lst <- append(slope_ci_lst, list(slope_ci_tuple))
+}
+
+slope_ci_lst
+```
+
+```{r}
+## calculate the proportion of CI that capture the testing beta1
+count = 0
+beta1 = 0
+for (interval in slope_ci_lst){
+  if (interval[1] < beta1 && interval[2] > beta1){
+    count = count + 1
+  }
+}
+proportion = count / length(slope_ci_lst)
+proportion
+```
+
+```{r}
+#Boxplot for the simulated beta1's from imputation
+# Extracting beta1 values from all models
+beta1_values_dep_Will <- numeric(length(best_models_dep))
+
+# Loop through the list of mixed models and extract beta1 from each model
+for (i in seq_along(best_models_dep)) {
+  # Extract fixed effects coefficients
+  fixed_effects <- fixef(best_models_dep[[i]])
+  # Extract beta1 
+  beta1_values_dep_Will[i] <- fixed_effects['Period']
+}
+
+# Drawing a boxplot of beta1 values
+boxplot(beta1_values, main = "Boxplot of beta1 values", ylab = "Beta1")
+# Add a horizontal line at y = 0
+abline(h = 0, col = "red", lwd = 2)
+```
+
+
+
+
+
+Simulation for Dinp
+```{r}
+### Pseudo Algorithm
+
+set.seed(1234)
+
+### Fix parameters
+alpha0 = 9.8
+sigma_b0 = 0.3^2
+beta1 = 0.2 # Set-up 1
+sigma2 = 1.1
+
+### Set up no. of simulations
+nsim = 1000 # Start with 10, see if everything works, then do 1000
+nhouse = 15
+### Store sim. (full) data sets 
+sim_data = list()
+time = c(0, 3, 6, 9)
+nt = 4
+### Simulate data sets
+
+for(m in 1:nsim){
+  dm = matrix(NA, nrow  = nhouse, ncol = nt)
+  # Simulate beta0 
+  
+  # For each house, generate y
+  for(i in 1:nhouse){
+    e_ij = rnorm(nt, sd = sqrt(sigma2))
+    beta0_i = rnorm(1, mean  = alpha0, sd = sqrt(sigma_b0)) 
+    yi = beta0_i + beta1*time + e_ij
+    dm[i, ] = yi 
+  }
+  sim_data[[m]] = dm
+
+}
+
+
+## Fill in code below
+
+# For each data set remove observations
+missing_sim_data = list()
+dd = 1
+
+for (dataset in sim_data){
+  dataset[4,4] = NA
+  dataset[5,2:4] = NA
+  dataset[6,4] = NA
+  dataset[7,3:4] = NA
+  dataset[8,3:4] = NA
+  dataset[9,3:4] = NA
+  dataset[10,3:4] = NA
+  dataset[11,3:4] = NA
+  dataset[12,2:4] = NA
+  dataset[13,2:4] = NA
+  dataset[14,2:4] = NA
+  missing_sim_data[[dd]] = dataset
+  dd = dd +1
+}
+
+# !!! exact same missing data pattern for each sim. data set
+
+# Then impute each data set using 5 diff methods
+imp_sim_data_1 = list()
+imp_sim_data_2 = list()
+imp_sim_data_3 = list()
+imp_sim_data_4 = list()
+
+```
+
+```{r}
+library(reshape2)
+# Convert matrix to dataframe with rows and columns as variables
+fcs_method_data = list()
+dd = 1
+for (m in missing_sim_data) {
+  DEP <- reshape2::melt(m)
+  colnames(DEP) <- c("House_ID", "Period", "DEP")
+  fcs_method_data[[dd]] = DEP
+  dd = dd + 1
+}
+```
+
+```{r,warning=FALSE, message=FALSE, echo=FALSE}
+# Fit model
+slope_ci_lst = list()
+library(mice)
+library(micemd)
+library(miceadds)
+library(nlme)
+library(geepack)
+best_models = list()
+index = 1
+m = fcs_method_data[[1]]
+for (m in fcs_method_data) {
+  vars <- colnames(m)
+  V <- length(vars) # Number of variables
+  
+  # Initialize predictor matrix (adjust based on actual variables and their relationships)
+  predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+  diag(predmat) <- 0
+  rownames(predmat) <- vars
+  colnames(predmat) <- vars
+  predmat["DEP", "House_ID"] <- -2
+  
+  # Define imputation methods 
+  impmeth <- rep("pmm", V)
+  names(impmeth) <- vars
+  impmeth["DEP"] <- "2l.continuous"
+  
+  m <- complete(mice(data=m, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+  
+  # Convert DEP to character to accommodate both numeric values and "DL"
+  m$DEP <- as.character(m$DEP)
+  
+  # Replace values below 99 with "DL"
+  
+  # Filter out rows where DEP is "DL"
+  
+  split_datasets <- split(m, m$.imp)
+  
+  models <- list()
+  
+  # Loop through each split dataset
+  for (imp_value in names(split_datasets)) {
+    # Extract the current dataset
+    current_dataset <- split_datasets[[imp_value]]
+    
+    # Fit the linear mixed model
+    # Assuming 'Period' and other relevant independent variables are in your dataset
+    # Adjust the formula as necessary to include the correct independent variables
+    model <- lmer(log(as.numeric(DEP)) ~ Period + (1|House_ID), data = current_dataset)
+    
+    # Store the model in the models list, naming it by the .imp value
+    models[[imp_value]] <- model
+  }
+  
+  # Accessing a specific model
+  # For example, to access the model for .imp = 1
+  model_imp_1 <- models[['1']]
+  model_imp_2 <- models[['2']]
+  model_imp_3 <- models[['3']]
+  model_imp_4 <- models[['4']]
+  model_imp_5 <- models[['5']]
+  
+  # Summary of the model
+  
+  # Get the residuals from the model
+  residuals_1 <- residuals(model_imp_1)
+  # Calculate Mean Squared Error (MSE)
+  mse1 <- mean(residuals_1^2)
+  
+  residuals_2 <- residuals(model_imp_2)
+  # Calculate Mean Squared Error (MSE)
+  mse2 <- mean(residuals_2^2)
+  
+  residuals_3 <- residuals(model_imp_3)
+  # Calculate Mean Squared Error (MSE)
+  mse3 <- mean(residuals_3^2)
+  
+  residuals_4 <- residuals(model_imp_4)
+  # Calculate Mean Squared Error (MSE)
+  mse4 <- mean(residuals_4^2)
+  
+  residuals_5 <- residuals(model_imp_4)
+  # Calculate Mean Squared Error (MSE)
+  mse5 <- mean(residuals_4^2)
+  
+  # Find out the best model among the imputed model from fcs
+  if (mse1 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_1
+  } else if (mse2 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_2
+  } else if (mse3 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_3
+  } else if (mse4 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_4
+  } else if (mse5 == max(mse1,mse2,mse3,mse4,mse5)) {
+    best_model = model_imp_5
+  }
+  
+  best_models[[index]] = best_model
+  
+  index = index + 1
+  
+  # Obtain confidence intervals for coefficients
+  conf_interval <- confint(best_model)
+  # Extract confidence interval for slope
+  slope_ci <- conf_interval["Period", ]
+  slope_ci_tuple <- c(slope_ci[[1]], slope_ci[[2]])
+  
+  slope_ci_lst <- append(slope_ci_lst, list(slope_ci_tuple))
+}
+
+slope_ci_lst
+```
+
+```{r}
+## calculate the proportion of CI that capture the testing beta1
+count = 0
+beta1 = 0
+for (interval in slope_ci_lst){
+  if (interval[1] < beta1 && interval[2] > beta1){
+    count = count + 1
+  }
+}
+proportion = count / length(slope_ci_lst)
+proportion
+```
+
+```{r}
+#Boxplot for the simulated beta1's from imputation
+# Extracting beta1 values from all models
+beta1_values_dinp_Will <- numeric(length(best_models))
+
+# Loop through the list of mixed models and extract beta1 from each model
+for (i in seq_along(best_models)) {
+  # Extract fixed effects coefficients
+  fixed_effects <- fixef(best_models[[i]])
+  # Extract beta1 
+  beta1_values_dinp_Will[i] <- fixed_effects['Period']
+}
+
+# Drawing a boxplot of beta1 values
+boxplot(beta1_values, main = "Boxplot of beta1 values", ylab = "Beta1")
+# Add a horizontal line at y = 0
+abline(h = 0.2, col = "red", lwd = 2)
+```
+
+
+Draw boxplot on the same scale:
+
+DEP
+```{r}
+dep_will = as.list(beta1_values_dep_Will)
+dep_ben = read.csv("beta1_list_DEP_Ben.csv")
+dep_ben = as.list(dep_ben$matrix.unlist.beta1_lst...nrow...length.beta1_lst...byrow...T.)
+load("beta1_list_DEP_Emily.RData")
+dep_emily = as.list(get("slope1")$result)
+dep_fred <- read_excel("beta1_list_DEP_Fred.xlsx")
+dep_tom <- read_excel("beta1_list_DEP_Tom.xlsx")
+dep_fred <- as.list(dep_fred$`unlist(b1_lst)`)
+dep_tom = as.list(dep_tom[1, ])
+
+dep_all <- list(FCS_LMM = dep_will, Cross_Hot_Deck = dep_ben, Joint_Modelling = dep_emily, Interpolation = dep_fred, Copymean = dep_tom)
+library(dplyr)
+library(tidyr)
+
+df <- do.call(rbind, lapply(names(dep_all), function(name) {
+  data.frame(Group = name, Value = unlist(dep_all[[name]]))
+}))
+
+# Make sure 'Group' is a factor (for plotting)
+df$Group <- as.factor(df$Group)
+
+library(ggplot2)
+
+ggplot(df, aes(x = Group, y = Value)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Method", y = "Beta1", title = "Simulation Results across Methods for DEP")
+
+```
+
+
+```{r}
+DiNP_will = as.list(beta1_values_dinp_Will)
+DiNP_ben = read.csv("beta1_list_DiNP_Ben.csv")
+DiNP_ben = as.list(DiNP_ben$matrix.unlist.beta1_lst...nrow...length.beta1_lst...byrow...T.)
+load("beta1_list_DiNP_Emily.RData")
+DiNP_emily = as.list(get("slope")$result)
+DiNP_fred <- read_excel("beta1_list_DiNP_Fred.xlsx")
+DiNP_tom <- read_excel("beta1_list_DiNP_Tom.xlsx")
+DiNP_fred <- as.list(DiNP_fred$`unlist(b1_lst)`)
+DiNP_tom = as.list(DiNP_tom[1, ])
+
+DiNP_all <- list(FCS_LMM = DiNP_will, Cross_Hot_Deck = DiNP_ben, Joint_Modelling = DiNP_emily, Interpolation = DiNP_fred, Copymean = DiNP_tom)
+library(dplyr)
+library(tidyr)
+
+df <- do.call(rbind, lapply(names(DiNP_all), function(name) {
+  data.frame(Group = name, Value = unlist(DiNP_all[[name]]))
+}))
+
+# Make sure 'Group' is a factor (for plotting)
+df$Group <- as.factor(df$Group)
+
+library(ggplot2)
+
+ggplot(df, aes(x = Group, y = Value)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0.2, color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Method", y = "Beta1", title = "Simulation Results across Methods for DiNP")
+
+```
+

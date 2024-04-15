@@ -1,0 +1,230 @@
+---
+title: "sim_for_fcs"
+output: pdf_document
+date: "2024-03-07"
+---
+
+
+```{r}
+### Pseudo Algorithm
+
+set.seed(1234)
+library(dplyr)
+library(readxl)
+### Fix parameters
+alpha0 = 9.8
+sigma_b0 = 0.3^2
+beta1 = 0.2 # Set-up 1
+sigma2 = 1.1
+
+### Set up no. of simulations
+nsim = 1000 # Start with 10, see if everything works, then do 1000
+nhouse = 15
+### Store sim. (full) data sets 
+sim_data = list()
+time = c(0, 3, 6, 9)
+nt = 4
+### Simulate data sets
+for(m in 1:nsim){
+  # Create an empty data frame for the chemical levels
+  dm <- data.frame(V1 = rep(NA, nhouse),
+                   V2 = rep(NA, nhouse),
+                   V3 = rep(NA, nhouse),
+                   V4 = rep(NA, nhouse))
+  
+  # For each house, generate chemical levels
+  for(i in 1:nhouse){
+    # Generate the chemical levels for each time point
+    chem_levels <- rnorm(nt, mean = alpha0, sd = sqrt(sigma2)) 
+    # Assign the generated levels to the data frame
+    dm[i, ] <- chem_levels
+  }
+  
+  sim_data[[m]] <- dm # Add the data frame to the list
+}
+
+
+
+## Fill in code below
+
+# Add tech survey data
+tech_survey_data = read_excel("20231027_Technician Survey Data.xlsx")
+tech_survey_data <- tech_survey_data %>% 
+  select(id, base_ac_yn, hrv_on_yn)
+# Extract the first 15 rows from set1
+properties_subset <- tech_survey_data[1:15, ]
+
+# For each data set remove observations
+missing_sim_data = list()
+dd = 1
+
+for (dataset in sim_data){
+  dataset[1:15, c("base_ac_yn", "hrv_on_yn")] <- properties_subset[, c("base_ac_yn", "hrv_on_yn")]
+  dataset[4,4] = NA
+  dataset[5,2:4] = NA
+  dataset[6,4] = NA
+  dataset[7,3:4] = NA
+  dataset[8,3:4] = NA
+  dataset[9,3:4] = NA
+  dataset[10,3:4] = NA
+  dataset[11,3:4] = NA
+  dataset[12,2:4] = NA
+  dataset[13,2:4] = NA
+  dataset[14,2:4] = NA
+  missing_sim_data[[dd]] = dataset
+  dd = dd +1
+}
+```
+
+```{r, echo = FALSE}
+impute_hot_deck <- function(data, group_vars) {
+  # Find rows with no NAs to be potential donors
+  complete_cases <- data %>% 
+    filter(!if_any(everything(), is.na)) 
+  
+  # For each row with NAs, find a donor from the complete cases
+  imputed_data <- data %>% 
+    rowwise() %>%
+    mutate(across(where(is.numeric), ~ifelse(is.na(.), 
+                                             {
+                                               donor_row <- complete_cases %>% 
+                                                 filter(across(all_of(group_vars), ~.x == cur_data()[[cur_column()]])) %>%
+                                                 sample_n(1)
+                                               if(nrow(donor_row) == 0) NA else donor_row[[cur_column()]]
+                                             }, 
+                                             .), .names = "imputed_{.col}"))
+  
+  # Now combine the original and imputed columns, preferring imputed values when they exist
+  imputed_data <- imputed_data %>%
+    ungroup() %>%
+    mutate(across(contains("imputed"), ~coalesce(., get(gsub("imputed_", "", cur_column()))), .names = "{gsub('imputed_', '', .col)}"))
+
+  # Select only the original columns (with imputed values where they were NA)
+  imputed_data <- imputed_data %>% select(-contains("imputed"))
+
+  return(imputed_data)
+}
+
+impute_hot_deck2 <- function(df, variables_to_impute, group_vars) {
+  # Find rows with no NAs in the columns of interest to be potential donors
+  complete_cases <- df %>%
+    filter(!if_any(all_of(variables_to_impute), is.na)) %>%
+    select(all_of(c(variables_to_impute, group_vars)))
+  
+  # For each row with NAs in the columns of interest, find a donor from the complete cases
+  imputed_data <- df %>%
+    rowwise() %>%
+    mutate(across(all_of(variables_to_impute), ~ if (is.na(.x)) {
+      # Find a donor row that matches the group_vars criteria
+      donor_rows <- complete_cases %>%
+        filter(across(all_of(group_vars), ~ .x == cur_data()[[cur_column()]]))
+      if (nrow(donor_rows) > 0) {
+        # Randomly select one of the donor rows
+        sample(donor_rows[[cur_column()]], 1)
+      } else {
+        # If no donor row found, return NA
+        NA_real_
+      }
+    } else {
+      .x # If not NA, keep the original value
+    }))
+  
+  imputed_data <- ungroup(imputed_data)
+  
+  return(imputed_data)
+}
+
+
+```
+
+```{r}
+# Initialize the list to store imputed datasets
+imp_sim_data_1 <- list()
+
+library(tidyr)
+
+# Convert each data frame in the list to the desired long format
+long_format_list <- lapply(missing_sim_data, function(df) {
+  # Use pivot_longer to melt V1, V2, V3, V4 into a 'period' column
+  df %>%
+    pivot_longer(
+      cols = starts_with("V"),
+      names_to = "period",
+      values_to = "value"
+    ) %>%
+    # Optionally, if you want to transform the period names from V1, V2, etc. to just numbers
+    mutate(period = as.numeric(gsub("V", "", period)))
+})
+
+# Loop through each dataset in missing_sim_data
+dd = 1
+for (m in long_format_list) {
+  # Apply the impute_hot_deck function to the entire dataset
+  imputed_dataset <- impute_hot_deck(m, group_vars = c("base_ac_yn", "hrv_on_yn", "period"))
+  
+  # Store the imputed dataset in the imp_sim_data_1 list
+  imp_sim_data_1[[dd]] <- imputed_dataset
+  sprintf("Running dd number %d", dd)
+  dd = dd + 1
+}
+
+
+
+```
+```{r}
+#Remove extra columns previously used for calculating missing values
+# Adding a 'houseid' column to each data frame in the list
+imp_sim_data_1 <- lapply(imp_sim_data_1, function(df) {
+  df %>% mutate(HouseID = ceiling(row_number() / 4))
+})
+
+
+imp_sim_data_1 <- lapply(imp_sim_data_1, function(df) {
+  df %>% select(-base_ac_yn, -hrv_on_yn)
+})
+```
+
+
+
+```{r}
+library(reshape2)
+slope_ci_lst = list()
+beta1_lst = list()
+# Convert matrix to dataframe with rows and columns as variables
+for (m in imp_sim_data_1) {
+  DEP <- melt(m, id.vars = c("HouseID", "period"))
+  #colnames(DEP) <- c("HouseID", "Period", "Concentration")
+  mod1_DEP <- lmer(log(value) ~ period + (1|HouseID),  data = DEP)
+  # Obtain confidence intervals for coefficients
+  conf_interval <- confint(mod1_DEP)
+  # Extract confidence interval for slope
+  slope_ci <- conf_interval["period", ]
+  slope_ci_tuple <- c(slope_ci[[1]], slope_ci[[2]])
+  slope_ci_lst <- append(slope_ci_lst, list(slope_ci_tuple))
+  beta_estimates <- fixef(mod1_DEP)
+  beta1 = beta_estimates["period"]
+  beta1_lst = append(beta1_lst, beta1)
+}
+```
+
+```{r}
+count_intervals_containing_zero <- function(ci_list) {
+  count <- 0
+  for (ci in ci_list) {
+    if (ci[1] <= beta1 && ci[2] >= beta1) {
+      count <- count + 1
+    }
+  }
+  return(count)
+}
+
+# The actual function call
+number_of_intervals_containing_zero <- count_intervals_containing_zero(slope_ci_lst)
+print(number_of_intervals_containing_zero/1000)
+# Assuming beta1_lst is a list of numeric vectors like shown in your screenshot
+values <- unlist(beta1_lst)  # Flatten the list to a numeric vector
+
+# Create a boxplot
+boxplot(values, main="Boxplot of DEP Simulations' Beta1", ylab="Values")
+
+```

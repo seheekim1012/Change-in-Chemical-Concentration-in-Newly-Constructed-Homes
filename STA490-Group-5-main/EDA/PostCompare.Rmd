@@ -1,0 +1,105 @@
+---
+title: "Active Sampler Pre/Post Compare"
+author: "Benjamin He"
+date: "11/23/2023"
+output: pdf_document
+---
+
+```{r, echo=FALSE, message=FALSE}
+
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+library(knitr)
+library(kableExtra)
+FirstPhase <- read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Passive air- PUF(pgm-3)",
+                         range = "A5:O38")
+FirstPhase <- FirstPhase %>% 
+  clean_names() %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0,
+    period == "3 month" ~ 3,
+    period == "6 month" ~ 6,
+    TRUE ~ 9
+  ))
+survey_data <- read_excel("20231027_0-12_Month_Questionnaire_Data.xlsx") %>% select(id, low_VOC_home, paints_yn,dogcat_yn)
+selected_survey_data <- survey_data[1:44,]
+Active_GFF <- read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Active air GFF (pgm-3)",
+                         range = "A2:Q30")
+
+
+full_data_active = merge(Active_GFF, selected_survey_data, by.x = 'House ID', by.y='id')
+full_data_active <- full_data_active[-9, ]
+```
+
+```{r, echo=FALSE, warning=FALSE}
+result_DEP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DEP = mean(DEP))
+
+result_DPP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DPP = mean(DPP))
+
+result_DiBP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DiBP = mean(DiBP))
+
+result_DnBP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DnBP = mean(DnBP))
+
+result_BzBP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(BzBP = mean(BzBP))
+
+result_DEHP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DEHP = mean(DEHP))
+
+result_DnOP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DnOP = mean(DnOP))
+
+result_DiNP <- full_data_active %>%
+  group_by(Period) %>%
+  summarise(DiNP = mean(DiNP))
+
+
+combined_result <- full_join(result_DEP, result_DPP, by = "Period") %>%
+  full_join(result_DiBP, by = "Period")%>%
+  full_join(result_DnBP, by = "Period")%>%
+  full_join(result_BzBP, by = "Period")%>%
+  full_join(result_DEHP, by = "Period")%>%
+  full_join(result_DnOP, by = "Period")%>%
+  full_join(result_DiNP, by = "Period")
+
+kable(combined_result, format = "markdown") %>%
+  kable_styling(full_width = FALSE)
+# Print the combined result
+
+
+your_data <- data.frame(
+  DEP = 5716.667 - 1595.917,
+  DPP = 391.7917 - 176.4167,
+  DiBP = 24960.000 - 5380.833,
+  DnBP = 18400.000 - 5211.667,
+  BzBP = 5439.083 - 3888.250,
+  DEHP = 10882.50- 12125.83,
+  DnOP = 8876.417 - 3962.583,
+  DiNP = 22299.17 - 18410.00)
+
+data_long <- your_data %>%
+  pivot_longer(cols = everything(), names_to = "Chemical", values_to = "difference")
+
+# Plot the differences
+ggplot(data_long, aes(x = Chemical, y = difference, fill = Chemical)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Difference Between Pre and Post Levels for Each Chemical",
+       x = "Chemical",
+       y = "Difference")
+```

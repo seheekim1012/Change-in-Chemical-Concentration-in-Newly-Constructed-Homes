@@ -1,0 +1,270 @@
+---
+title: "InterpolationLOCF Method"
+author: "You Peng"
+date: '2024-02-01'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+```
+
+```{r, echo = FALSE}
+concentration_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", skip = 4)
+selected_concentration_data <- concentration_data[1:33, c(1:15, 18,19,20,23,26)]
+
+tech_survey_data = read_excel("20231027_Technician Survey Data.xlsx")
+tech_survey_data <- tech_survey_data %>% 
+  select(id, base_ac_yn, hrv_on_yn)
+survey_data <- read_excel("20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn)
+selected_survey_data <- survey_data[1:44,]
+
+merged_data = merge(selected_concentration_data, tech_survey_data, by.x = 'House_ID', by.y='id')
+full_data1 = merge(merged_data, selected_survey_data, by.x = 'House_ID', by.y='id')
+full_data <- full_data1 %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+
+
+# filter to only for the houses
+full_data <- full_data[c(1:33), ]
+
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, Period == "9 month" ~ 9))
+
+#head(full_data)
+
+#Convert all number strings to numeric
+full_data$DEP <- as.numeric(full_data$DEP)
+full_data$DPP <- as.numeric(full_data$DPP)
+full_data$DiBP <- as.numeric(full_data$DiBP)
+full_data$DnBP <- as.numeric(full_data$DnBP)
+full_data$BzBP <- as.numeric(full_data$BzBP)
+full_data$DEHP <- as.numeric(full_data$DEHP)
+full_data$DnOP <- as.numeric(full_data$DnOP)
+full_data$DiNP <- as.numeric(full_data$DiNP)
+full_data$TCEP <- as.numeric(full_data$TCEP)
+full_data$TCPP1 <- as.numeric(full_data$TCPP1)
+full_data$TCPP2 <- as.numeric(full_data$TCPP2)
+full_data$TPhP <- as.numeric(full_data$TPhP)
+full_data$TEHP <- as.numeric(full_data$TEHP)
+
+
+# data_six_month = full_data %>% filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003" | House_ID == "NHAQS-006" | House_ID == "NHAQS-008")
+full_data <- full_data[-nrow(full_data),]
+full_data
+```
+
+
+```{r}
+data_loader <- function(chemical_name, house_id, data_df) {
+  # Filter data for the specified house_id and chemical_name
+  filtered_data <- data_df[data_df$House_ID == house_id, ]
+  concentration_vector <- numeric(length = 4)  # Initialize vector to store concentrations
+  
+  for (period in c(0, 3, 6, 9)) {
+    if (any(filtered_data$Period == period, na.rm=TRUE)) {
+      concentration <- filtered_data[filtered_data$Period == period, ][[chemical_name]]
+      concentration_vector[which(period == c(0, 3, 6, 9))] <- concentration
+    } 
+    else {
+      concentration_vector[which(period == c(0, 3, 6, 9))] <- NA  
+    }
+  }
+  
+  return(concentration_vector)
+}
+```
+
+```{r}
+copymean_imputation <- function(yn){
+  first_NA_i <- which(is.na(yn))[1]
+  if (is.na(first_NA_i)){
+    return (yn)
+  }
+  else {
+    for (i in (first_NA_i:4)){
+      yn[i] <- mean(yn[1:(first_NA_i-1)])
+    }
+    return (yn)
+  }
+  }
+```
+
+```{r, echo = FALSE}
+# xn: time period corresponding to 0 month to 9 month, yn: the corresponding chemical concentration
+MAX_DL = 231
+interpolation <- function(yn) {
+  if (is.na(which(is.na(yn))[1])) {
+    return (yn)
+  } else {
+    first_na_index <- which(is.na(yn))[1]
+  }
+  ya = yn[1]
+  yb = yn[first_na_index-1]
+  if (first_na_index-1 == 1) {
+    slope = 0
+  } else {
+    slope = (yb-ya)/(first_na_index-1-1)
+  }
+  for (k in c(first_na_index:4)) {
+      yn[k] = ya + (k-1)*slope
+      if (yn[k] < MAX_DL) {
+        yn[k] = MAX_DL
+      }
+  }
+  return (yn)
+}
+```
+
+
+```{r, echo = FALSE}
+# xn: time period corresponding to 0 month to 9 month, yn: the corresponding chemical concentration
+create_data <- function(chemical, House_ID, dataframe, func=interpolation) {
+  yn <- data_loader(chemical, House_ID, dataframe)
+  output <- func(yn)
+  House_ID <- rep(House_ID, times = 4)
+  period <- c(0,3,6,9)
+  chemical <- rep(chemical, times = 4)
+  concentration <- output
+  df <- data.frame(House_ID = House_ID, Period = period, Chemical = chemical, Concentration = concentration)
+  return (df)
+}
+```
+
+```{r}
+create_data('DiBP', 'NHAQS-009', dataframe = full_data)
+```
+
+```{r}
+imp_data <- data.frame()
+chem_lst = c('DEP', 'DPP', 'DiBP', 'DnBP', 'BzBP', 'DEHP', 'DnOP', 'DiNP')
+for (chemical in unique(chem_lst)) {
+  for (house in unique(full_data$House_ID)) {
+    temp_data <- create_data(chemical, house, full_data)
+    imp_data <- rbind(imp_data, temp_data)
+  }
+}
+imp_data
+```
+
+
+```{r}
+DEP = imp_data %>% filter(Chemical == 'DEP')
+mod1_DEP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DEP)
+summary(mod1_DEP)
+confint(mod1_DEP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DEP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+DPP = imp_data %>% filter(Chemical == 'DPP')
+mod1_DPP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DPP)
+summary(mod1_DPP)
+confint(mod1_DPP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DPP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+DiBP = imp_data %>% filter(Chemical == 'DiBP')
+mod1_DiBP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DiBP)
+summary(mod1_DiBP)
+confint(mod1_DiBP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DiBP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+DnBP = imp_data %>% filter(Chemical == 'DnBP')
+mod1_DnBP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DnBP)
+summary(mod1_DnBP)
+confint(mod1_DnBP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DnBP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+BzBP = imp_data %>% filter(Chemical == 'BzBP')
+mod1_BzBP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = BzBP)
+summary(mod1_BzBP)
+confint(mod1_BzBP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_BzBP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+DEHP = imp_data %>% filter(Chemical == 'DEHP')
+mod1_DEHP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DEHP)
+summary(mod1_DEHP)
+confint(mod1_DEHP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DEHP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+DnOP = imp_data %>% filter(Chemical == 'DnOP')
+mod1_DnOP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DnOP)
+summary(mod1_DnOP)
+confint(mod1_DnOP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DnOP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+
+```{r}
+DiNP = imp_data %>% filter(Chemical == 'DiNP')
+mod1_DiNP <- lmer(log(Concentration) ~ Period + (1|House_ID),  data = DiNP)
+summary(mod1_DiNP)
+confint(mod1_DiNP)
+
+# Get the residuals from the model
+residuals <- residuals(mod1_DiNP)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+mse
+```
+

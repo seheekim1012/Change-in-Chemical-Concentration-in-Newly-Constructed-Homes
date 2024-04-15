@@ -1,0 +1,93 @@
+---
+title: "LLM"
+output: html_document
+date: '2023-11-30'
+---
+
+
+---
+author: "Daihao Wu, Benjamin He, Seehe Kim, Fred Peng, Tom Xu"
+date: "11/16/2023"
+output: pdf_document
+---
+
+```{r, echo = FALSE, message = FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+```
+
+```{r}
+complete_house <- read.csv("../data/data_complete_month.csv")
+
+mod0_DEP <- lm(log(DEP) ~ Period, data= complete_house)
+mod0_DPP <- lm(log(DPP) ~ Period, data= complete_house)
+mod0_DiBP <- lm(log(DiBP) ~ Period, data= complete_house)
+mod0_DnBP <- lm(log(DnBP) ~ Period, data= complete_house)
+mod0_BzBP <- lm(log(BzBP) ~ Period, data= complete_house)
+mod0_DEHP <- lm(log(DEHP) ~ Period, data= complete_house)
+mod0_DnOP <- lm(log(DnOP) ~ Period, data= complete_house)
+mod0_DiNP <- lm(log(DiNP) ~ Period, data= complete_house)
+
+```
+
+```{r}
+mod1_DEP <- lmer(log(DEP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DEP)
+anova(mod1_DEP, mod0_DEP)
+```
+
+```{r}
+mod1_DPP <- lmer(log(DPP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DPP)
+anova(mod1_DPP, mod0_DPP)
+```
+
+```{r}
+mod1_DiBP <- lmer(log(DiBP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DiBP)
+
+anova(mod1_DiBP, mod0_DiBP)
+
+```
+
+```{r}
+mod1_DnBP <- lmer(log(DnBP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DnBP)
+anova(mod1_DnBP, mod0_DnBP)
+```
+
+```{r}
+mod1_BzBP <- lmer(log(BzBP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_BzBP)
+anova(mod1_BzBP, mod0_BzBP)
+```
+
+```{r}
+mod1_DEHP <- lmer(log(DEHP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DEHP)
+anova(mod1_DEHP, mod0_DEHP)
+```
+
+
+```{r}
+mod1_DnOP <- lmer(log(DnOP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DnOP)
+anova(mod1_DnOP, mod0_DnOP)
+
+```
+
+```{r}
+mod1_DiNP <- lmer(log(DiNP) ~ Period + (1|House_ID),  data = complete_house)
+summary(mod1_DiNP)
+anova(mod1_DiNP, mod0_DiNP)
+```
+
+

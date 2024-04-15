@@ -1,0 +1,126 @@
+---
+title: "Exploratory Data Analysis Report for Group 5"
+author: "Daihao Wu, Benjamin He, Seehe Kim, Fred Peng, Tom Xu"
+date: "11/16/2023"
+output: pdf_document
+---
+
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+```
+
+```{r, echo = FALSE}
+concentration_data = read_excel("NHS_2023_Data_October_31_UniversityofToronto_First_phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", skip = 4)
+selected_concentration_data <- concentration_data[, 1:15]
+
+tech_survey_data = read_excel("20231027_Technician Survey Data.xlsx")
+tech_survey_data <- tech_survey_data %>% 
+  select(id, base_ac_yn, hrv_on_yn)
+survey_data <- read_excel("20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn)
+selected_survey_data <- survey_data[1:44,]
+
+merged_data = merge(selected_concentration_data, tech_survey_data, by.x = 'House_ID', by.y='id')
+full_data1 = merge(merged_data, selected_survey_data, by.x = 'House_ID', by.y='id')
+full_data <- full_data1 %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+
+
+# filter to only for the houses
+full_data <- full_data[c(1:33), ]
+
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, Period == "9 month" ~ 9))
+
+#head(full_data)
+
+#Convert all number strings to numeric
+full_data$DEP <- as.numeric(full_data$DEP)
+full_data$DPP <- as.numeric(full_data$DPP)
+full_data$DiBP <- as.numeric(full_data$DiBP)
+full_data$DnBP <- as.numeric(full_data$DnBP)
+full_data$BzBP <- as.numeric(full_data$BzBP)
+full_data$DEHP <- as.numeric(full_data$DEHP)
+full_data$DnOP <- as.numeric(full_data$DnOP)
+full_data$DiNP <- as.numeric(full_data$DiNP)
+
+# data_six_month = full_data %>% filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003" | House_ID == "NHAQS-006" | House_ID == "NHAQS-008")
+data_six_month = full_data %>% 
+  filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003" | House_ID == "NHAQS-006" | House_ID == "NHAQS-008") %>% 
+  filter(Period == 0 | Period == 3 | Period == 6)
+  
+
+```
+
+```{r}
+data_six_month %>% 
+  ggplot(aes(x = Period, y = BzBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", subtitle = "Houses with complete period only"
+         )
+```
+
+```{r}
+# HRC usage is not included in the model since all three houses used HRV.
+
+full_model = lmer(DEP ~ Period + as.factor(base_ac_yn) + as.factor(low_VOC_home) + as.factor(paints_yn) + (1|House_ID),  data = data_six_month)
+summary(full_model)
+```
+
+```{r}
+full_DEP <- lmer(log(DEP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(full_DEP)
+min_DEP <- lmer(log(DEP) ~  (1|House_ID),  data = data_six_month)
+anova(min_DEP, full_DEP)
+```
+
+
+```{r}
+mod1_DPP <- lmer(log(DPP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_DPP)
+
+```
+
+```{r}
+mod1_DiBP <- lmer(log(DiBP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_DiBP)
+```
+
+```{r}
+mod1_DnBP <- lmer(log(DnBP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_DnBP)
+```
+
+```{r}
+mod1_BzBP <- lmer(log(BzBP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_BzBP)
+
+```
+
+```{r}
+mod1_DEHP <- lmer(log(DEHP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_DEHP)
+```
+
+```{r}
+mod1_DnOP <- lmer(log(DnOP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_DnOP)
+```
+
+```{r}
+mod1_DiNP <- lmer(log(DiNP) ~ Period + (1|House_ID),  data = data_six_month)
+summary(mod1_DiNP)
+```

@@ -1,0 +1,267 @@
+---
+title: "Chemical Concentrations in each house"
+author: "Sehee Kim"
+date: "2023-11-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+```
+
+
+```{r data set up}
+FirstPhase <- read_excel("NHS_2023_Data_October_31_UniversityofToronto_First_phase.xlsx", 
+                         sheet = "Passive air- PUF(pgm-3)",
+                         range = "A5:BV38")
+
+FirstPhase <- FirstPhase %>% 
+  mutate(Period = case_when(
+    Period == "0 month" ~ 0,
+    Period == "3 month" ~ 3,
+    Period == "6 month" ~ 6,
+    TRUE ~ 9
+  ))
+colnames(FirstPhase)[which(names(FirstPhase) == "House ID")] <- "House_ID" #change column names
+colnames(FirstPhase)[which(names(FirstPhase) == "Sample ID")] <- "Sample_ID" #change column names 
+
+# complete case houses only 
+FirstPhaseComp <- FirstPhase %>% 
+    filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003")
+
+```
+
+## Chemical Concentration in each complete case houses
+
+```{r}
+# make the dataframe longer
+houses <- FirstPhase %>% 
+  select(House_ID, Period, DEP, DPP, DiBP, DnBP, BzBP, DEHP, DnOP, DiNP, base_ac_yn) %>% 
+  pivot_longer(., cols = c(dDEP, DPP, DiBP, DnBP, BzBP, DEHP, DnOP, DiNP), names_to = "chem", values_to = "conc")  
+
+#house 1 
+houses %>%
+  filter(House_ID == "NHAQS-001") %>% 
+  ggplot(aes(x = Period, y = conc, group = chem)) + 
+  geom_line(aes(color = chem))+
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ggtitle("Chemical Concentration in house 1")+
+  labs(color = "Chemicals")
+
+#house2
+houses %>% 
+  filter(House_ID == "NHAQS-002") %>% 
+  ggplot(aes(x = Period, y = conc, group = chem)) + 
+  geom_line(aes(color = chem))+
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ggtitle("Chemical Concentration in house 2")+
+  labs(color = "Chemicals")
+#house 3
+houses %>% 
+  filter(House_ID == "NHAQS-003") %>% 
+  ggplot(aes(x = Period, y = conc, group = chem)) + 
+  geom_line(aes(color = chem))+
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ggtitle("Chemical Concentration in house 3")+
+  labs(color = "Chemicals")
+
+```
+
+
+# Concentration of each chemical 
+
+### DEP
+
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DEP) %>% 
+  ggplot(aes(x = Period, y = DEP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("Period (months)") +
+  ggtitle("Concentraion of DEP in passive air sample"
+         )
+```
+
+### DPP
+
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DPP) %>% 
+  ggplot(aes(x = Period, y = DPP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("Period (months)") +
+  ggtitle("Concentraion of DPP in passive air sample"
+         )
+```
+
+### DiBP
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DiBP) %>% 
+  ggplot(aes(x = Period, y = DiBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("Period (months)") +
+  ggtitle("Concentraion of DiBP in passive air sample"
+         )
+```
+
+### DnBP
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DnBP) %>% 
+  ggplot(aes(x = Period, y = DnBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("Period (months)") +
+  ggtitle("Concentraion of DnBP in passive air sample"
+         )
+```
+
+### BzBP
+
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, BzBP) %>% 
+  ggplot(aes(x = Period, y = BzBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("Period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample"
+         )
+```
+
+### DEHP
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DEHP) %>% 
+  ggplot(aes(x = Period, y = DEHP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DEHP in passive air sample"
+          )
+```
+### DnOP
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DnOP) %>% 
+  filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003") %>% 
+  ggplot(aes(x = Period, y = DnOP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DnOP in passive air sample"
+  )
+```
+
+### DiNP
+
+```{r}
+FirstPhase %>% 
+  select(House_ID, Period, DiNP) %>% 
+  ggplot(aes(x = Period, y = DiNP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DiNP in passive air sample"
+  )
+```
+
+## Concentrations of each chemical (complete case only)
+
+### DEP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DEP) %>% 
+  ggplot(aes(x = Period, y = DEP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DEP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### DPP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DPP) %>% 
+  ggplot(aes(x = Period, y = DPP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DPP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### DiBP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DiBP) %>% 
+  ggplot(aes(x = Period, y = DiBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DiBP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### DnBP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DnBP) %>% 
+  ggplot(aes(x = Period, y = DnBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DnBP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### BzBP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, BzBP) %>% 
+  ggplot(aes(x = Period, y = BzBP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of BzBP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### DEHP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DEHP) %>% 
+  ggplot(aes(x = Period, y = DEHP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DEHP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### DnOP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DnOP) %>% 
+  ggplot(aes(x = Period, y = DnOP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DnOP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```
+### DiNP
+```{r}
+FirstPhaseComp %>% 
+  select(House_ID, Period, DiNP) %>% 
+  ggplot(aes(x = Period, y = DiNP, group = House_ID)) +
+  geom_line(aes(color = House_ID)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("Period(months)") +    
+  ggtitle("Concentration of DiNP in passive air sample", subtitle = "Houses with complete Period only"
+  )
+```

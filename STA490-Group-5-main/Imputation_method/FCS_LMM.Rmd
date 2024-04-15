@@ -1,0 +1,965 @@
+---
+title: ""
+author: "Daihao Wu, Benjamin He, Seehe Kim, Fred Peng, Tom Xu"
+date: ""
+output: pdf_document
+---
+
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+if(!("lme4" %in% installed.packages())) install.packages("lme4")
+
+#install.packages("lme4")
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(VIM)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+```
+
+```{r, echo = FALSE}
+concentration_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", skip = 4)
+selected_concentration_data <- concentration_data[, 1:15]
+
+tech_survey_data = read_excel("20231027_Technician Survey Data.xlsx")
+tech_survey_data <- tech_survey_data %>% 
+  select(id, base_ac_yn, hrv_on_yn)
+survey_data <- read_excel("20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn)
+selected_survey_data <- survey_data[1:44,]
+
+merged_data = merge(selected_concentration_data, tech_survey_data, by.x = 'House_ID', by.y='id')
+full_data1 = merge(merged_data, selected_survey_data, by.x = 'House_ID', by.y='id')
+full_data <- full_data1 %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+
+
+# filter to only for the houses
+
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, Period == "9 month" ~ 9)) 
+
+full_data = full_data %>% mutate(House_ID = case_when(House_ID == "NHAQS-001" ~ 1, House_ID == "NHAQS-002" ~ 2,House_ID == "NHAQS-003" ~ 3,House_ID == "NHAQS-004" ~ 4,House_ID == "NHAQS-005" ~ 5,House_ID == "NHAQS-006" ~ 6,House_ID == "NHAQS-007" ~ 7,House_ID == "NHAQS-008" ~ 8,House_ID == "NHAQS-009" ~ 9,House_ID == "NHAQS-010" ~ 10,House_ID == "NHAQS-011" ~ 11,House_ID == "NHAQS-012" ~ 12,House_ID == "NHAQS-013" ~ 13,House_ID == "NHAQS-014" ~ 14,House_ID == "NHAQS-015" ~ 15,House_ID == "NHAQS-016" ~ 16,))
+  
+#head(full_data)
+
+#Convert all number strings to numeric
+full_data$DEP <- as.numeric(full_data$DEP)
+full_data$DPP <- as.numeric(full_data$DPP)
+full_data$DiBP <- as.numeric(full_data$DiBP)
+full_data$DnBP <- as.numeric(full_data$DnBP)
+full_data$BzBP <- as.numeric(full_data$BzBP)
+full_data$DEHP <- as.numeric(full_data$DEHP)
+full_data$DnOP <- as.numeric(full_data$DnOP)
+full_data$DiNP <- as.numeric(full_data$DiNP)
+```
+
+
+
+FCS_LMM_LN-het Method Starts:
+
+```{r}
+
+#Data preparation
+full_data <- full_data %>% complete(nesting(House_ID), Period = seq(min(Period), max(Period),3), explicit = FALSE) %>% group_by(House_ID) %>% select(House_ID, Period, 'Start date (yyyy-mm-dd)', DEP, DPP, DiBP, DnBP, BzBP, DEHP, DnOP, DiNP, paints_yn, low_VOC_home, hrv_on_yn, base_ac_yn)
+
+colnames(full_data)[colnames(full_data) == 'Start date (yyyy-mm-dd)'] <- "StartDate"
+
+full_data$StartDate <- substr(full_data$StartDate, 1, 7)
+
+dep_data <- full_data %>% 
+  select(House_ID, Period, DEP, low_VOC_home)
+
+dpp_data <- full_data %>% 
+  select(House_ID, Period, DPP, low_VOC_home)
+
+dibp_data <- full_data %>% 
+  select(House_ID, Period, DiBP, low_VOC_home)
+
+dnbp_data <- full_data %>% 
+  select(House_ID, Period, DnBP, low_VOC_home)
+
+bzbp_data <- full_data %>% 
+  select(House_ID, Period, BzBP, low_VOC_home)
+
+dehp_data <- full_data %>% 
+  select(House_ID, Period, DEHP, low_VOC_home)
+
+dnop_data <- full_data %>% 
+  select(House_ID, Period, DnOP, low_VOC_home)
+
+dinp_data <- full_data %>% 
+  select(House_ID, Period, DiNP, low_VOC_home)
+
+```
+
+```{r}
+# #write.csv(dpp_data, "dpp_data.csv", row.names=FALSE)
+# 
+# library(car)
+# 
+# # Assuming dpp_data is your dataset and DPP is the dependent variable
+# # Fit a linear model using all other variables as predictors
+# # Note: Replace `predictor1`, `predictor2`, ..., with your actual predictor variable names
+# model <- lmer(DPP ~ Period + (1|House_ID), data=dpp_data)
+# summary(model)
+# # Calculate VIF
+# #vif_values <- vif(model)
+# 
+# # Print VIF values
+# #print(vif_values)
+# 
+# # Identify variables with high VIF
+# #high_vif <- vif_values[vif_values > 5]  # Adjust the threshold as necessary
+# #print(high_vif)
+```
+
+Notice from above result, we notice that singular fit problem occurred, so we could not impute all the variables at once, because it the complexity of the model would not produce effective results.
+```{r}
+library(mice)
+library(micemd)
+library(miceadds)
+library(nlme)
+library(geepack)
+set.seed(1)
+# Setup for imputation for only DPP
+
+vars <- colnames(dpp_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DPP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DPP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dpp_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DPP to character to accommodate both numeric values and "DL"
+imputed_data$DPP <- as.character(imputed_data$DPP)
+
+# Replace values below 19 with "DL"
+imputed_data$DPP[imputed_data$DPP < 19] <- "DL"
+
+# Filter out rows where DPP is "DL"
+imputed_data <- imputed_data %>% filter(DPP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DPP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 3
+
+```{r}
+
+confint(model_imp_3)
+summary(model_imp_3)
+
+```
+
+Similarly, we would do it for dep:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only DPP
+
+vars <- colnames(dep_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DEP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DEP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dep_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DEP to character to accommodate both numeric values and "DL"
+imputed_data$DEP <- as.character(imputed_data$DEP)
+
+# Replace values below 99 with "DL"
+imputed_data$DEP[as.numeric(imputed_data$DEP) < 99] <- "DL"
+
+# Filter out rows where DEP is "DL"
+imputed_data <- imputed_data %>% filter(DEP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DEP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 2
+
+```{r}
+
+confint(model_imp_2)
+summary(model_imp_2)
+
+```
+
+Similarly, we would do it for dehp:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only dehp
+
+vars <- colnames(dehp_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DEHP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DEHP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dehp_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DEHP to character to accommodate both numeric values and "DL"
+imputed_data$DEHP <- as.character(imputed_data$DEHP)
+
+# Replace values below 231 with "DL"
+imputed_data$DEHP[imputed_data$DEHP < 231] <- "DL"
+
+# Filter out rows where DEHP is "DL"
+imputed_data <- imputed_data %>% filter(DEHP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DEHP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 3
+
+```{r}
+
+confint(model_imp_3)
+summary(model_imp_3)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+Similarly, we would do it for dihp:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only dehp
+
+vars <- colnames(dinp_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DiNP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DiNP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dinp_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DiNP to character to accommodate both numeric values and "DL"
+imputed_data$DiNP <- as.character(imputed_data$DiNP)
+
+# Replace values below 168 with "DL"
+imputed_data$DiNP[imputed_data$DiNP < 168] <- "DL"
+
+# Filter out rows where DiNP is "DL"
+imputed_data <- imputed_data %>% filter(DiNP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DiNP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 1
+
+```{r}
+
+confint(model_imp_1)
+summary(model_imp_1)
+
+```
+
+
+
+
+
+
+
+
+Similarly, we would do it for dibp:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only dehp
+
+vars <- colnames(dibp_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DiBP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DiBP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dibp_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DiBP to character to accommodate both numeric values and "DL"
+imputed_data$DiBP <- as.character(imputed_data$DiBP)
+
+# Replace values below 198 with "DL"
+imputed_data$DiBP[imputed_data$DiBP < 198] <- "DL"
+
+# Filter out rows where DiBP is "DL"
+imputed_data <- imputed_data %>% filter(DiBP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DiBP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 2
+
+```{r}
+
+confint(model_imp_2)
+summary(model_imp_2)
+
+```
+
+
+
+
+
+
+Similarly, we would do it for dnbp:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only dnbp
+
+vars <- colnames(dnbp_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DnBP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DnBP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dnbp_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DnBP to character to accommodate both numeric values and "DL"
+imputed_data$DnBP <- as.character(imputed_data$DnBP)
+
+# Replace values below 19 with "DL"
+imputed_data$DnBP[imputed_data$DnBP < 19] <- "DL"
+
+# Filter out rows where DnBP is "DL"
+imputed_data <- imputed_data %>% filter(DnBP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DnBP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 2
+
+```{r}
+
+confint(model_imp_2)
+summary(model_imp_2)
+
+```
+
+
+
+
+
+Similarly, we would do it for bzbp:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only bzbp
+
+vars <- colnames(bzbp_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["BzBP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["BzBP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=bzbp_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert BzBP to character to accommodate both numeric values and "DL"
+imputed_data$BzBP <- as.character(imputed_data$BzBP)
+
+# Replace values below 36 with "DL"
+imputed_data$BzBP[imputed_data$BzBP < 36] <- "DL"
+
+# Filter out rows where BzBP is "DL"
+imputed_data <- imputed_data %>% filter(BzBP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(BzBP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 1
+
+```{r}
+
+confint(model_imp_1)
+summary(model_imp_1)
+
+```
+
+
+
+
+
+
+Similarly, we would do it for dnop:
+
+```{r}
+set.seed(1)
+# Setup for imputation for only dnop
+
+vars <- colnames(dnop_data) # Assuming DPP concentration and related variables are columns
+V <- length(vars) # Number of variables
+
+# Initialize predictor matrix (adjust based on actual variables and their relationships)
+predmat <- matrix(1, nrow = V, ncol = V)  # Start with all as potential predictors
+diag(predmat) <- 0
+rownames(predmat) <- vars
+colnames(predmat) <- vars
+predmat["DnOP", "House_ID"] <- -2
+
+# Define imputation methods 
+impmeth <- rep("pmm", V)
+names(impmeth) <- vars
+impmeth["DnOP"] <- "2l.continuous"
+
+imputed_data <- complete(mice(data=dnop_data, method=impmeth, predictorMatrix=predmat, diagnostics=TRUE, maxit=5, m=5, remove.collinear=FALSE), action = "long", include = FALSE)
+
+# Convert DnOP to character to accommodate both numeric values and "DL"
+imputed_data$DnOP <- as.character(imputed_data$DnOP)
+
+# Replace values below 48 with "DL"
+imputed_data$DnOP[imputed_data$DnOP < 48] <- "DL"
+
+# Filter out rows where DnOP is "DL"
+imputed_data <- imputed_data %>% filter(DnOP != "DL")
+
+write.csv(imputed_data, "output_data.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+library(data.table)
+# Load the dataset
+output_data <- fread("output_data.csv")
+
+# Split the dataset by the .imp column
+split_datasets <- split(output_data, output_data$.imp)
+
+models <- list()
+
+# Loop through each split dataset
+for (imp_value in names(split_datasets)) {
+  # Extract the current dataset
+  current_dataset <- split_datasets[[imp_value]]
+  
+  # Fit the linear mixed model
+  # Assuming 'Period' and other relevant independent variables are in your dataset
+  # Adjust the formula as necessary to include the correct independent variables
+  model <- lmer(log(as.numeric(DnOP)) ~ Period + (1|House_ID), data = current_dataset)
+  
+  # Store the model in the models list, naming it by the .imp value
+  models[[imp_value]] <- model
+}
+
+# Accessing a specific model
+# For example, to access the model for .imp = 1
+model_imp_1 <- models[['1']]
+model_imp_2 <- models[['2']]
+model_imp_3 <- models[['3']]
+model_imp_4 <- models[['4']]
+
+# Summary of the model
+
+# Get the residuals from the model
+residuals_1 <- residuals(model_imp_1)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_1^2)
+mse
+
+residuals_2 <- residuals(model_imp_2)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_2^2)
+mse
+
+residuals_3 <- residuals(model_imp_3)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_3^2)
+mse
+
+residuals_4 <- residuals(model_imp_4)
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals_4^2)
+mse
+
+```
+from the above mse we select the one with smallest, so we use result from imp = 1
+
+```{r}
+
+confint(model_imp_1)
+summary(model_imp_1)
+
+```

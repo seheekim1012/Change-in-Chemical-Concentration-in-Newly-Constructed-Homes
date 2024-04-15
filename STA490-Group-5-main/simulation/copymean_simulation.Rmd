@@ -1,0 +1,170 @@
+---
+title: "simulation study"
+output: html_document
+date: "2024-03-14"
+---
+
+```{r, echo = FALSE, message = FALSE}
+
+library(lme4)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(Matrix)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+
+```
+
+
+```{r, echo = FALSE}
+### Pseudo Algorithm
+
+set.seed(1234)
+
+### Fix parameters
+alpha0 = 10.5
+sigma_b0 = 0.2^2
+beta1 = 0 # Set-up 1
+sigma2 = 1.4
+
+### Set up no. of simulations
+nsim = 1000 # Start with 10, see if everything works, then do 1000
+nhouse = 14
+### Store sim. (full) data sets 
+sim_data = list()
+time = c(0, 3, 6, 9)
+nt = 4
+### Simulate data sets
+
+for(m in 1:nsim){
+  dm = matrix(NA, nrow  = nhouse, ncol = nt)
+  # Simulate beta0 
+  # For each house, generate y
+  for(i in 1:nhouse){
+    e_ij = rnorm(nt, sd = sqrt(sigma2))
+    beta0_i = rnorm(1, mean  = alpha0, sd = sqrt(sigma_b0)) 
+    yi = beta0_i + beta1*time + e_ij
+    dm[i, ] = yi 
+  }
+  sim_data[[m]] = dm
+
+}
+```
+
+## Fill in code below
+```{r, echo = FALSE}
+# For each data set remove observations
+missing_sim_data = list()
+dd = 1
+
+for (dataset in sim_data){
+  dataset[4,4] = NA
+  dataset[5,2:4] = NA
+  dataset[6,4] = NA
+  dataset[7,3:4] = NA
+  dataset[8,3:4] = NA
+  dataset[9,3:4] = NA
+  dataset[10,3:4] = NA
+  dataset[11,3:4] = NA
+  dataset[12,2:4] = NA
+  dataset[13,2:4] = NA
+  dataset[14,2:4] = NA
+  missing_sim_data[[dd]] = dataset
+  dd = dd +1
+}
+
+print(missing_sim_data[1])
+```
+
+```{r, echo = FALSE}
+# !!! exact same missing data pattern for each sim. data set
+
+# Then impute each data set using 5 diff methods
+imp_sim_data_1 = list()
+imp_sim_data_2 = list()
+imp_sim_data_3 = list()
+imp_sim_data_4 = list()
+imp_sim_data_5 = list()
+
+# On each imputed data set (5 diff methods)
+# Fit model
+```
+
+# Extract beta1 (1000 for each imputation method)
+```{r, echo = FALSE}
+# The interpolation method
+copymean_imputation <- function(yn){
+  first_NA_i <- which(is.na(yn))[1]
+  if (is.na(first_NA_i)){
+    return (yn)
+  }
+  else {
+    for (i in (first_NA_i:4)){
+      yn[i] <- mean(yn[1:(first_NA_i-1)])
+    }
+    return (yn)
+  }
+  }
+```
+
+```{r, echo = FALSE}
+# Update the list of matrix using copymean
+dd = 1
+for (m in missing_sim_data) {
+  for (i in 1:nrow(m)) {
+    yn = m[i, ]
+    m[i, ] = copymean_imputation(yn)
+  }
+  imp_sim_data_1[[dd]] = m
+  dd = dd +1
+}
+```
+
+```{r}
+library(reshape2)
+slope_ci_lst = list()
+fitted_slopes = list()
+# Convert matrix to dataframe with rows and columns as variables
+for (m in imp_sim_data_1) {
+  DEP <- melt(m)
+  colnames(DEP) <- c("HouseID", "Period", "Concentration")
+  mod1_DEP <- lmer(log(Concentration) ~ Period + (1|HouseID),  data = DEP)
+  # Obtain confidence intervals for coefficients
+  conf_interval <- confint(mod1_DEP)
+  # Extract confidence interval for slope
+  slope_ci <- conf_interval["Period", ]
+  slope_ci_tuple <- c(slope_ci[[1]], slope_ci[[2]])
+  slope_ci_lst <- append(slope_ci_lst, list(slope_ci_tuple))
+  fitted_slope <- fixef(mod1_DEP)["Period"]
+  fitted_slopes <- append(fitted_slopes, list(fitted_slope))
+}
+```
+
+# Boxplot
+```{r}
+boxplot(unlist(fitted_slopes))
+my_df <- data.frame(fitted_slopes)
+
+# Write the data frame to an Excel file
+write.xlsx(my_df, "my_data.xlsx")
+```
+
+
+```{r}
+## calculate the proportion of CI that capture the testing beta1
+count = 0
+beta1 = 0
+for (interval in slope_ci_lst){
+  if (interval[1] < beta1 && interval[2] > beta1){
+    count = count + 1
+  }
+}
+proportion = count / length(slope_ci_lst)
+proportion
+```
+

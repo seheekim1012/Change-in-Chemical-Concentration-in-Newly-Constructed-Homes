@@ -1,0 +1,292 @@
+---
+title: "Correlation Analysis using ACF and CCF"
+author: "Group 5"
+date: "11/21/2023"
+output: pdf_document
+---
+
+```{r}
+knitr::opts_chunk$set(fig.width=10, fig.height=6) 
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+full_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx",
+    sheet = "Passive air- PUF(pgm-3)", skip = 4)
+```
+
+```{r data of three houses}
+library(ggplot2)
+
+# filter to only for the houses
+full_data <- full_data[c(1:33), ] %>% 
+  clean_names()
+
+# Change the period from text to numerical data
+full_data <- full_data %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0, 
+    period == "3 month" ~ 3, 
+    period == "6 month" ~ 6, 
+    TRUE ~ 9))
+
+# contains only houses with complete month
+data_complete_month <- full_data %>% 
+  filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" |house_id == "NHAQS-003")
+```
+
+## Average of each chemical concentration at 0,3,6,9 month
+We will be first producing the acf of the avg value in different houses for each chemical and then the acf of concentration of different chemicals from different homes
+
+```{r avg_func for each chemicals}
+
+# This function calculate the avg of concentration of the first eight chemicals for different period in houses with complete month only
+# and produce the acf graph for the avg value in different houses of each chemical
+
+avg_func = function(name_chem){
+  #chemical at 0month 
+  data_complete_month_0month = data_complete_month %>% 
+    filter(period == 0) %>% dplyr::select({{ name_chem }})
+  #average of chemical concentration at 0 month in all houses 
+avg_0 = mean(as.numeric(data_complete_month_0month[[1]]))
+
+#chemical at 3month 
+data_complete_month_3month = data_complete_month %>% 
+  filter(period == 3) %>% 
+  dplyr::select({{ name_chem }})
+#average concentration at 3month in all houses 
+avg_3 = mean(as.numeric(data_complete_month_3month[[1]]))
+
+data_complete_month_6month = data_complete_month %>% 
+  filter(period == 6) %>% dplyr::select({{ name_chem }})
+
+avg_6 = mean(as.numeric(data_complete_month_6month[[1]]))
+
+data_complete_month_9month = data_complete_month %>% 
+  filter(period == 9) %>% dplyr::select({{ name_chem }})
+
+avg_9 = mean(as.numeric(data_complete_month_9month[[1]]))
+
+acf(c(avg_0,avg_3,avg_6,avg_9))
+  
+}
+```
+
+### ACF for average DEP concentration 
+```{r}
+# for DEP
+
+avg_func(dep)
+```
+### ACF for average dpp concentration 
+
+```{r}
+
+# for DPP
+
+avg_func(dpp)
+```
+### ACF for average DiBP concentration 
+
+```{r}
+
+# for DiBP
+avg_func(di_bp)
+```
+### ACF for average DnBP concentration 
+
+```{r}
+# for DnBP
+acfval = avg_func(dn_bp)
+acfval
+```
+
+### ACF for average BzBP concentration 
+
+```{r}
+
+# for BzBP
+
+avg_func(bz_bp)
+```
+### ACF for average DEHP concentration 
+
+
+```{r}
+
+# for DEHP
+
+avg_func(dehp)
+```
+
+### ACF for average DnOP concentration 
+
+```{r}
+
+# for DnOP
+
+avg_func(DnOP)
+```
+
+### ACF for average DiNP concentration 
+
+```{r}
+
+# for DiNP
+
+avg_func(DiNP)
+```
+### Results
+The autocorrelation of average concentration of each chemicals are within the bound which indicates that these lines are insignificant. We cannot say that the chemical concentration is correlated with each month. 
+
+## Eac Houses and Chemical concentraions
+Now we would produce the acf of concentration of different chemicals from different homes to check the correlation between month. 
+
+### House 1
+```{r}
+# produce the acf graph for house 001 which contains values across all time period for different chemicals
+
+data_house_001 = data_complete_month %>% filter(house_id == "NHAQS-001")
+
+# for DEP
+#par(mfrow = c(4, 2))
+# Plot ACF for each chemical
+acf(as.numeric(data_house_001$dep), main = "ACF for DEP from house 001 data")
+acf(as.numeric(data_house_001$dpp), main = "ACF for DPP from house 001 data")
+acf(as.numeric(data_house_001$di_bp), main = "ACF for DiBP from house 001 data")
+acf(as.numeric(data_house_001$dn_bp), main = "ACF for DnBP from house 001 data")
+acf(as.numeric(data_house_001$bz_bp), main = "ACF for BzBP from house 001 data")
+acf(as.numeric(data_house_001$dehp), main = "ACF for DEHP from house 001 data")
+acf(as.numeric(data_house_001$dn_op), main = "ACF for DnOP from house 001 data")
+acf(as.numeric(data_house_001$di_np), main = "ACF for DiNP from house 001 data")
+
+```
+
+### House 2
+```{r}
+# produce the acf graph for house 002 which contains values across all time period for different chemicals
+
+data_house_002 = data_complete_month %>% filter(house_id == "NHAQS-002")
+
+# for DEP
+par(mfrow = c(3, 2))
+
+# Plot ACF for each chemical
+acf(as.numeric(data_house_002$dep), main = "ACF for DEP from house 002 data")
+acf(as.numeric(data_house_002$dpp), main = "ACF for DPP from house 002 data")
+acf(as.numeric(data_house_002$di_bp), main = "ACF for DiBP from house 002 data")
+acf(as.numeric(data_house_002$dn_bp), main = "ACF for DnBP from house 002 data")
+acf(as.numeric(data_house_002$bz_bp), main = "ACF for BzBP from house 002 data")
+acf(as.numeric(data_house_002$dehp), main = "ACF for DEHP from house 002 data")
+acf(as.numeric(data_house_002$dn_op), main = "ACF for DnOP from house 002 data")
+acf(as.numeric(data_house_002$di_np), main = "ACF for DiNP from house 002 data")
+
+```
+
+### House 3
+```{r}
+# produce the acf graph for house 003 which contains values across all time period for different chemicals
+
+data_house_003 = data_complete_month %>% filter(house_id == "NHAQS-003")
+
+# for DEP
+par(mfrow = c(4, 2))
+
+# Plot ACF for each chemical
+acf(as.numeric(data_house_003$dep), main = "ACF for DEP from house 003 data")
+acf(as.numeric(data_house_003$dpp), main = "ACF for DPP from house 003 data")
+acf(as.numeric(data_house_003$di_bp), main = "ACF for DiBP from house 003 data")
+acf(as.numeric(data_house_003$dn_bp), main = "ACF for DnBP from house 003 data")
+acf(as.numeric(data_house_003$bz_bp), main = "ACF for BzBP from house 003 data")
+acf(as.numeric(data_house_003$dehp), main = "ACF for DEHP from house 003 data")
+acf(as.numeric(data_house_003$dn_op), main = "ACF for DnOP from house 003 data")
+acf(as.numeric(data_house_003$di_np), main = "ACF for DiNP from house 003 data")
+
+```
+
+### Results
+Similar to previous ACF, all the lines are within the bound therefore we can conclude that even with the individual chemical concentration, there is no correlation between each month. 
+
+## Cross correlation between different Chemicals in each house
+
+### House 1
+```{r}
+# Calculate the CCF between different chemicals
+
+house1 = data_complete_month %>% filter(house_id == "NHAQS-001")
+f <- function(house) {
+  house <- house[order(house$period), ]
+  
+  DEP = as.numeric(house$dep)
+  DPP = as.numeric(house$dpp)
+  DiBP = as.numeric(house$di_bp)
+  DnBP = as.numeric(house$dn_bp)
+  BzBP = as.numeric(house$bz_bp)
+  DEHP = as.numeric(house$dehp)
+  DnOP = as.numeric(house$dn_op)
+  DiNP = as.numeric(house$di_np)
+  
+  ccf(DEP, DPP, type= "correlation")
+  ccf(DEP, DiBP)
+  ccf(DEP, DnBP)
+  ccf(DEP, BzBP)
+  ccf(DEP, DEHP)
+  ccf(DEP, DnOP)
+  ccf(DEP, DiNP)
+  
+  ccf(DPP, DiBP)
+  ccf(DPP, DnBP)
+  ccf(DPP, BzBP)
+  ccf(DPP, DEHP)
+  ccf(DPP, DnOP)
+  ccf(DPP, DiNP)
+
+  ccf(DiBP, DnBP)
+  ccf(DiBP, BzBP)
+  ccf(DiBP, DEHP)
+  ccf(DiBP, DnOP)
+  ccf(DiBP, DiNP)
+  ccf(DnBP, BzBP)
+  ccf(DnBP, DEHP)
+  ccf(DnBP, DnOP)
+  ccf(DnBP, DiNP)
+  
+  ccf(BzBP, DEHP)
+  ccf(BzBP, DnOP)
+  ccf(BzBP, DiNP)
+  ccf(DEHP, DnOP)
+  ccf(DEHP, DiNP)
+  ccf(DnOP, DiNP)
+}
+par(mfrow = c(3,2))
+f(house1)
+```
+
+
+### House 2
+```{r}
+house2 = data_complete_month %>% filter(house_id == "NHAQS-002")
+par(mfrow = c(3,2))
+f(house2)
+```
+### House 3
+```{r}
+house3 = data_complete_month %>% filter(house_id == "NHAQS-003")
+par(mfrow = c(3,2))
+f(house3)
+```
+
+### Results 
+```{r}
+ccfval = ccf(as.numeric(house1$dpp),as.numeric(house1$bz_bp),type = "correlation", plot = FALSE)
+ccfval # acf at each lag 
+```
+The cross correlation between different pairs of chemical indicates similar results as above ACF. 
+Some pairs of chemicals like DPP and Bz_Bp at `lag = 0` is very close to the limit but still not enough to go above.
+Again, we do not see clear correlation between different chemicals, thus we assume that they are not related. 
+
+## Conclusion
+
+This insignificance comes from a small population size `(n)`. The theoretical SD for `n = 2` is 1 which is the maximum value of ACF that we can get. From this small sample size, it is very difficult to sensitively catch correlation. The only possible conclusion that we can make here is that there is no strong correlation between each chemicals. 

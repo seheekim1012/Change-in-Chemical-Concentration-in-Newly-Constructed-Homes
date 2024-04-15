@@ -1,0 +1,428 @@
+---
+title: "Phase 1 imputation"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+  pdf_document:
+    toc: true
+---
+
+## Data Set up
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(mice)
+library(mitml)
+library(jomo)
+library(mitools)
+library(miceadds)
+library(ggmice)
+library(gt)
+library(gtExtras)
+library(broom.mixed)
+library(ggpubr)
+library(lmtest)
+library(naniar)
+set.seed(1012)
+```
+
+# Phase 2
+
+## Data set-up
+```{r Data set up for phase 2, warning=FALSE}
+# phase 2 including all the houses 
+phase2_raw <- read_excel("NewHomeStudy-Phthalates-March03-Sara.V-edited.xlsx", 
+                      sheet = "Passive Air - PDMS (pg.m-3)",
+                      range = "A1:J125")
+# phase 2 including houses with only complete cases 
+phase2_full <- read_excel("NewHomeStudy-Phthalates-March03-Sara.V-edited.xlsx", 
+                      sheet = "full_data",
+                      range = "A1:J69")
+
+phase2 <- phase2_raw %>%  
+  complete(nesting(House_ID), Period = seq(min(Period), max(Period),3), explicit = FALSE) %>% # Put NAs in the missing concentration
+  group_by(House_ID) %>% 
+  # the concentration of chemicals are logged 
+  mutate(DEP = ifelse(DEP == "<DL", log(50), log(as.numeric(DEP))), # replace DL with the limit value 
+         DPP = ifelse(DPP == "<DL", log(101), log(as.numeric(DPP))),
+         DiBP = ifelse(DiBP == "<DL", log(80), log(as.numeric(DiBP))),
+         DnBP = ifelse(DnBP == "<DL", log(103), log(as.numeric(DnBP))),
+         BzBP = ifelse(BzBP == "<DL", log(87), log(as.numeric(BzBP))),
+         DEHP = ifelse(DEHP == "<DL", log(75),log(as.numeric(DEHP))),
+         DnOP = ifelse(DnOP == "<DL", log(69), log(as.numeric(DnOP))),
+         DiNP = ifelse(DiNP == "<DL", log(102), log(as.numeric(DiNP))))
+
+phase2_full <- phase2_full %>% # data with full period
+  mutate(DEP = ifelse(DEP == "<DL", log(50), log(as.numeric(DEP))),
+         DPP = ifelse(DPP == "<DL", log(101), log(as.numeric(DPP))),
+         DiBP = ifelse(DiBP == "<DL", log(80), log(as.numeric(DiBP))),
+         DnBP = ifelse(DnBP == "<DL", log(103), log(as.numeric(DnBP))),
+         BzBP = ifelse(BzBP == "<DL", log(87), log(as.numeric(BzBP))),
+         DEHP = ifelse(DEHP == "<DL", log(75),log(as.numeric(DEHP))),
+         DnOP = ifelse(DnOP == "<DL", log(69), log(as.numeric(DnOP))),
+         DiNP = ifelse(DiNP == "<DL", log(102), log(as.numeric(DiNP))))
+
+phase2 <-merge(phase2,build_mat,by.x = 'House_ID', by.y='id')
+phase2 <-merge(phase2,tech_survey_data,by.x = 'House_ID', by.y='id')
+phase2_full <-merge(phase2_full, build_mat, by.x = 'House_ID', by.y='id')
+phase2_full <- merge(phase2_full, tech_survey_data, by.x = 'House_ID', by.y='id')
+phase2_full_9months <- phase2_full[!(phase2_full$Period %in% 12),] # complete dataset untill 9 months 
+phase2_9months <- phase2[!(phase2$Period %in% 12),] # data until 9month 
+# houses with complete casesw until 12 month 
+phase2_full_12months <- phase2_full %>% 
+  filter(House_ID %in% c("NHAQS-028", "NHAQS-029", "NHAQS-030", "NHAQS-031", "NHAQS-032", "NHAQS-034","NHAQS-035","NHAQS-036"))
+
+
+# create dataset for each chemicals 
+log_DEP2_full <- phase2_9months%>% 
+  dplyr::select(House_ID, Period, DEP, low_VOC_home, paints_yn, base_ac_yn)
+log_DPP2_full <- phase2_9months %>% 
+  dplyr::select(House_ID, Period, DPP, low_VOC_home, paints_yn, base_ac_yn)
+log_DiBP2_full <- phase2_9months %>% 
+  dplyr::select(House_ID, Period, DiBP, low_VOC_home, paints_yn, base_ac_yn)
+log_DnBP2_full <- phase2_9months %>% 
+  dplyr::select(House_ID, Period, DnBP, low_VOC_home, paints_yn, base_ac_yn)
+log_BzBP2_full <- phase2_9months %>% 
+  dplyr::select(House_ID, Period, BzBP, low_VOC_home, paints_yn, base_ac_yn)
+log_DEHP2_full <- phase2_9months %>% 
+  dplyr::select(House_ID, Period, DEHP, low_VOC_home, paints_yn, base_ac_yn)
+log_DnOP2_full <- phase2_9months%>% 
+  dplyr::select(House_ID, Period, DnOP, low_VOC_home, paints_yn, base_ac_yn)
+log_DiNP2_full <- phase2_9months %>% 
+  dplyr::select(House_ID, Period, DiNP, low_VOC_home, paints_yn, base_ac_yn)
+
+# building material statistics in phase 2 
+phase2_9months %>% 
+  group_by(base_ac_yn) %>% 
+  count
+```
+
+## Phase 2 Imputation 9 month with period only  
+
+### DEP 
+```{r phase 2 DEP}
+# check convergence with traceplot, ACF, and R hat
+# fm1 <- DEP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DEP2_full,formula = fm1, n.burn = 6000, n.iter = 1000,m =10, seed = 1569)
+# plot(imp, trace = "all")
+
+
+lvl <- c(house_id = 1, period = 1, DEP =1)
+imp_jomo <- jomo.lmer(DEP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DEP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+
+#fit model with different covariates 
+fit_dep2 <- with(data = imp_mids, lmer(DEP~Period+(1|clus))) #best
+fit_dep_low2 <- with(data = imp_mids, lmer(DEP~Period+low_VOC_home +(1|clus)))
+fit_dep_ac2 <- with(data = imp_mids, lmer(DEP~Period+ base_ac_yn +(1|clus)))
+fit_dep_paints2 <- with(data = imp_mids, lmer(DEP~Period+ paints_yn +(1|clus)))
+fit_dep_full2 <- with(data = imp_mids, lmer(DEP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+# compare models with Wald's pooled test 
+testModels(as.mitml.result(fit_dep_ac2), as.mitml.result(fit_dep2), method = "D2")
+testModels(as.mitml.result(fit_dep_low2), as.mitml.result(fit_dep2), method = "D2")
+testModels(as.mitml.result(fit_dep_paints2), as.mitml.result(fit_dep2), method = "D2")
+# save result of best model fitting 
+deptest2 <- testEstimates(as.mitml.result(fit_dep2))
+# visualization of imputation 
+dep_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DEP)) + 
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3)) 
+
+```
+### DPP 
+
+```{r}
+# check convergence 
+# fm1 <- DPP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DPP2_full,formula = fm1, n.burn = 6000, n.iter = 1000,m =10, seed = 1569)
+# plot(imp, trace = "all")
+# DPP 
+lvl <- c(House_ID = 1, Period = 1, DPP =1)
+imp_jomo <- jomo.lmer(DPP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DPP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+#fit models 
+fit_dpp2 <- with(data = imp_mids, lmer(DPP~Period+(1|clus)))
+fit_dpp_low2 <- with(data = imp_mids, lmer(DPP~Period+low_VOC_home +(1|clus)))
+fit_dpp_ac2 <- with(data = imp_mids, lmer(DPP~Period+ base_ac_yn +(1|clus)))
+fit_dpp_paints2 <- with(data = imp_mids, lmer(DPP~Period+ paints_yn +(1|clus)))
+fit_dpp_full2 <- with(data = imp_mids, lmer(DPP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+# compare models with pooled Wald's test 
+testModels(as.mitml.result(fit_dpp_ac2), as.mitml.result(fit_dpp2), method = "D2")
+testModels(as.mitml.result(fit_dpp_low2), as.mitml.result(fit_dpp2), method = "D2")
+testModels(as.mitml.result(fit_dpp_paints2), as.mitml.result(fit_dpp2), method = "D2")
+dpptest2 <- testEstimates(as.mitml.result(fit_dpp2))
+
+# visualization of imputation
+dpp_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DPP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3))
+
+```
+### DiBP
+
+```{r DiBP}
+# fm1 <- DiBP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DiBP2_full,formula = fm1, n.burn = 6000, n.iter = 1000,m =10, seed = 1569)
+#plot(imp, trace = "all")
+lvl <- c(House_ID = 1, Period = 1, DiBP =1)
+
+imp_jomo <- jomo.lmer(DiBP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DiBP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+
+#fit models
+fit_dibp2 <- with(data = imp_mids, lmer(DiBP~Period+(1|clus))) #best
+fit_dibp_low2 <- with(data = imp_mids, lmer(DiBP~Period+low_VOC_home +(1|clus)))
+fit_dibp_ac2 <- with(data = imp_mids, lmer(DiBP~Period+ base_ac_yn +(1|clus)))
+fit_dibp_paints2 <- with(data = imp_mids, lmer(DiBP~Period+ paints_yn +(1|clus)))
+fit_dibp_full2 <- with(data = imp_mids, lmer(DiBP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+
+# compare models 
+testModels(as.mitml.result(fit_dibp_ac2), as.mitml.result(fit_dibp2), method = "D2")
+testModels(as.mitml.result(fit_dibp_low2), as.mitml.result(fit_dibp2), method = "D2")
+testModels(as.mitml.result(fit_dibp_paints2), as.mitml.result(fit_dibp2), method = "D2")
+#save estimates of null model 
+dibptest2 <- testEstimates(as.mitml.result(fit_dibp2))
+
+# visualization
+dibp_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DiBP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3))  
+
+
+```
+### DnBP
+
+```{r}
+# check for convergence 
+# fm1 <- DnBP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DnBP2_full,formula = fm1, n.burn = 6000, n.iter = 1000,m =10, seed = 1569)
+# plot(imp, trace = "all") 
+
+# imputation 
+lvl <- c(House_ID = 1, Period = 1, DnBP =1)
+imp_jomo <- jomo.lmer(DnBP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DnBP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+
+# fitting models
+fit_dnbp2 <- with(data = imp_mids, lmer(DnBP~Period+(1|clus)))
+fit_dnbp_low2 <- with(data = imp_mids, lmer(DnBP~Period+low_VOC_home +(1|clus)))
+fit_dnbp_ac2 <- with(data = imp_mids, lmer(DnBP~Period+ base_ac_yn +(1|clus)))
+fit_dnbp_paints2 <- with(data = imp_mids, lmer(DnBP~Period+ paints_yn +(1|clus)))
+fit_dnbp_full2 <- with(data = imp_mids, lmer(DnBP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+# compare models 
+testModels(as.mitml.result(fit_dnbp_ac2), as.mitml.result(fit_dnbp2), method = "D2")
+testModels(as.mitml.result(fit_dnbp_low2), as.mitml.result(fit_dnbp2), method = "D2")
+testModels(as.mitml.result(fit_dnbp_paints2), as.mitml.result(fit_dnbp2), method = "D2")
+
+# save the estimates with null model 
+dnbptest2 <- testEstimates(as.mitml.result(fit_dnbp2))
+
+# visualize the imputation
+dnbp_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DnBP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3)) 
+
+```
+### BzBP
+```{r}
+# check convergence 
+# fm1 <- BzBP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_BzBP2_full,formula = fm1, n.burn = 3000, n.iter = 200,m =10, seed = 1569)
+#plot(imp, trace = "all")
+# imputation 
+lvl <- c(House_ID = 1, Period = 1, BzBP =1)
+imp_jomo <- jomo.lmer(BzBP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_BzBP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)#fit models 
+fit_bzbp2 <- with(data = imp_mids, lmer(BzBP~Period+(1|clus)))
+fit_bzbp_low2 <- with(data = imp_mids, lmer(BzBP~Period+low_VOC_home +(1|clus)))
+fit_bzbp_ac2 <- with(data = imp_mids, lmer(BzBP~Period+ base_ac_yn +(1|clus)))
+fit_bzbp_paints2 <- with(data = imp_mids, lmer(BzBP~Period+ paints_yn +(1|clus)))
+fit_bzbp_full2 <- with(data = imp_mids, lmer(BzBP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+# compare models with null 
+testModels(as.mitml.result(fit_bzbp_ac), as.mitml.result(fit_bzbp2), method = "D2")
+testModels(as.mitml.result(fit_bzbp_low2), as.mitml.result(fit_bzbp2), method = "D2")
+testModels(as.mitml.result(fit_bzbp_paints2), as.mitml.result(fit_bzbp2), method = "D2")
+
+# save estimates of null model 
+bzbptest2 <- testEstimates(as.mitml.result(fit_bzbp2))
+bzbp_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=BzBP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3)) 
+
+```
+
+### DEHP
+
+```{r}
+# fm1 <- DEHP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DEHP2_full,formula = fm1, n.burn = 3000, n.iter = 200,m =10, seed = 1569)
+#plot(imp, trace = "all")
+# DEHP
+lvl <- c(House_ID = 1, Period = 1, DEHP = 1)
+imp_jomo <- jomo.lmer(DEHP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DEHP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+#fit model 
+fit_dehp2 <- with(data = imp_mids, lmer(DEHP~Period+(1|clus)))
+fit_dehp_low2 <- with(data = imp_mids, lmer(DEHP~Period+low_VOC_home +(1|clus)))
+fit_dehp_ac2 <- with(data = imp_mids, lmer(DEHP~Period+ base_ac_yn +(1|clus)))
+fit_dehp_paints2 <- with(data = imp_mids, lmer(DEHP~Period+ paints_yn +(1|clus)))
+fit_dehp_full2 <- with(data = imp_mids, lmer(DEHP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+
+testModels(as.mitml.result(fit_dehp_ac2), as.mitml.result(fit_dehp2), method = "D2")
+testModels(as.mitml.result(fit_dehp_low2), as.mitml.result(fit_dehp2), method = "D2")
+testModels(as.mitml.result(fit_dehp_paints2), as.mitml.result(fit_dehp2), method = "D2")
+dehptest2 <- testEstimates(as.mitml.result(fit_dehp2))
+
+
+dehp_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DEHP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3)) 
+
+```
+
+### DnOP
+```{r}
+# fm1 <- DnOP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DnOP2_full,formula = fm1, n.burn = 6000, n.iter = 1000,m =10, seed = 1569)
+#plot(imp, trace = "all")
+# DnOP
+lvl <- c(House_ID = 1, Period = 1, DnOP =1)
+imp_jomo <- jomo.lmer(DnOP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DnOP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+#fit model 
+fit_dnop2 <- with(data = imp_mids, lmer(DnOP~Period+(1|clus)))
+fit_dnop_low2 <- with(data = imp_mids, lmer(DnOP~Period+low_VOC_home +(1|clus)))
+fit_dnop_ac2 <- with(data = imp_mids, lmer(DnOP~Period+ base_ac_yn +(1|clus)))
+fit_dnop_paints2 <- with(data = imp_mids, lmer(DnOP~Period+ paints_yn +(1|clus)))
+fit_dnop_full2 <- with(data = imp_mids, lmer(DnOP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+
+testModels(as.mitml.result(fit_dnop_full2), as.mitml.result(fit_dnop2), method = "D2")
+testModels(as.mitml.result(fit_dnop_low2), as.mitml.result(fit_dnop2), method = "D2")
+testModels(as.mitml.result(fit_dnop_paints2), as.mitml.result(fit_dnop2), method = "D2")
+dnoptest2 <- testEstimates(as.mitml.result(fit_dnop2))
+
+dnop_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DnOP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3)) 
+
+```
+
+### DiNP
+
+```{r}
+# fm1 <- DiNP ~ Period + (1|House_ID)
+# imp <- jomoImpute(data = log_DiNP2_full,formula = fm1, n.burn = 6000, n.iter = 1000,m =10, seed = 1569)
+#plot(imp, trace = "all")
+# DiNP
+lvl <- c(House_ID = 1, Period = 1, DiNP =1)
+imp_jomo <- jomo.lmer(DiNP ~ Period + (1|House_ID),
+                      level = lvl, meth = "common",
+                      data = log_DiNP2_full, nburn = 6000, nbetween = 1000, nimp = 10)
+
+imp_mids <- datalist2mids(#             make mids variable
+  split(imp_jomo, imp_jomo$Imputation)[-1] # split and remove first element
+)
+#fit model 
+fit_dinp2 <- with(data = imp_mids, lmer(DiNP~Period+(1|clus)))
+fit_dinp_low2 <- with(data = imp_mids, lmer(DiNP~Period+low_VOC_home +(1|clus)))
+fit_dinp_ac2 <- with(data = imp_mids, lmer(DiNP~Period+ base_ac_yn +(1|clus)))
+fit_dinp_paints2 <- with(data = imp_mids, lmer(DiNP~Period+ paints_yn +(1|clus)))
+fit_dinp_full2 <- with(data = imp_mids, lmer(DiNP~Period+ paints_yn+low_VOC_home+base_ac_yn +(1|clus)))
+
+testModels(as.mitml.result(fit_dinp_paints2), as.mitml.result(fit_dinp2), method = "D2")
+testModels(as.mitml.result(fit_dinp_low2), as.mitml.result(fit_dinp2), method = "D2")
+testModels(as.mitml.result(fit_dinp_paints2), as.mitml.result(fit_dinp2), method = "D2")
+dinptest2 <- testEstimates(as.mitml.result(fit_dinp2))
+
+#visualize 
+
+dinp_ggmice2 <- ggmice(imp_mids, aes(x=Period, y=DiNP))+
+  geom_point() + scale_x_continuous(breaks = seq(0, 12, by = 3))  
+
+```
+
+
+```{r}
+# estimate of the model
+imp2<- gt(tibble(Chemicals = c("DEP","DPP","DiBP","DnBP","BzBP", "DEHP","DnOP","DiNP"),
+                   Estimate = c(deptest2$estimates[2],
+                                dpptest2$estimates[2],
+                                dibptest2$estimates[2],
+                                dnbptest2$estimates[2],
+                                bzbptest2$estimates[2],
+                                dehptest2$estimates[2],
+                                dnoptest2$estimates[2],
+                                dinptest2$estimates[2]
+                                ),
+                   Std.Error = c(deptest2$estimates[4],
+                                 dpptest2$estimates[4],
+                                 dibptest2$estimates[4],
+                                 dnbptest2$estimates[4],
+                                 bzbptest2$estimates[4],
+                                 dehptest2$estimates[4],
+                                 dnoptest2$estimates[4],
+                                 dinptest2$estimates[4]
+                                 ),
+                   pvalue = c(deptest2$estimates[10],
+                              dpptest2$estimates[10],
+                              dibptest2$estimates[10],
+                              dnbptest2$estimates[10],
+                              bzbptest2$estimates[10],
+                              dehptest2$estimates[10],
+                              dnoptest2$estimates[10], 
+                              dinptest2$estimates[10]
+                              ))) 
+imp2 <- imp2 %>% 
+  tab_header(title = "Model results of phase 2 imputed data", subtitle = "Period estimates") %>% 
+   gt_highlight_rows(
+    rows = pvalue <= 0.05,# a logic statement
+    fill = "grey",
+    bold_target_only = TRUE,
+    target_col = Chemicals
+    ) %>% 
+  fmt_number(decimals = 2, n_sigfig = 2) %>% 
+  fmt_scientific(columns = pvalue, rows = pvalue <= 0.001)
+
+#visualize imputed data
+ggarrange(dep_ggmice2,dpp_ggmice2,dibp_ggmice2,dnbp_ggmice2,bzbp_ggmice2,dehp_ggmice2,dehp_ggmice2,dnop_ggmice2,dinp_ggmice2,common.legend = TRUE , legend = "bottom")
+
+```

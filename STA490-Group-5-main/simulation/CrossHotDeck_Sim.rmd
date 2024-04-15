@@ -1,0 +1,141 @@
+---
+title: "Exploratory Data Analysis Report for Group 5"
+author: "Daihao Wu, Benjamin He, Seehe Kim, Fred Peng, Tom Xu"
+date: "11/16/2023"
+output: pdf_document
+---
+
+```{r, echo = FALSE, message = FALSE}
+# This line only installs lme4 if you haven't got it installed already
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lme4)
+library(lmerTest)
+library(VIM)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+```
+
+```{r, echo = FALSE}
+concentration_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", range = "A5:BU38")
+selected_concentration_data <- concentration_data[, 1:15]
+tech_survey_data = read_excel("20231027_Technician Survey Data.xlsx")
+tech_survey_data <- tech_survey_data %>% 
+  select(id, base_ac_yn, hrv_on_yn)
+survey_data <- read_excel("20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn)
+selected_survey_data <- survey_data[1:44,]
+merged_data = merge(selected_concentration_data, tech_survey_data, by.x = 'House_ID', by.y='id')
+full_data1 = merge(merged_data, selected_survey_data, by.x = 'House_ID', by.y='id')
+full_data <- full_data1 %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+# filter to only for the houses
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, Period == "9 month" ~ 9)) 
+  
+#head(full_data)
+#Convert all number strings to numeric
+full_data$DEP <- as.numeric(full_data$DEP)
+full_data$DPP <- as.numeric(full_data$DPP)
+full_data$DiBP <- as.numeric(full_data$DiBP)
+full_data$DnBP <- as.numeric(full_data$DnBP)
+full_data$BzBP <- as.numeric(full_data$BzBP)
+full_data$DEHP <- as.numeric(full_data$DEHP)
+full_data$DnOP <- as.numeric(full_data$DnOP)
+full_data$DiNP <- as.numeric(full_data$DiNP)
+```
+
+```{r}
+full_data <- full_data%>% 
+  complete(nesting(House_ID), Period = seq(min(Period), max(Period),3), explicit = FALSE) %>% 
+  group_by(House_ID) %>% 
+  select(House_ID, Period, DEP, DPP, DiBP, DnBP, BzBP, DEHP, DnOP, DiNP)
+dep_data <- full_data %>% 
+  select(House_ID, Period, DEP)
+dpp_data <- full_data %>% 
+  select(House_ID, Period, DPP)
+dibp_data <- full_data %>% 
+  select(House_ID, Period, DiBP)
+dnbp_data <- full_data %>% 
+  select(House_ID, Period, DnBP)
+bzbp_data <- full_data %>% 
+  select(House_ID, Period, BzBP)
+dehp_data <- full_data %>% 
+  select(House_ID, Period, DEHP)
+dnop_data <- full_data %>% 
+  select(House_ID, Period, DnOP)
+dinp_data <- full_data %>% 
+  select(House_ID, Period, DiNP)
+```
+
+```{r}
+merged_data <- merge(full_data, tech_survey_data, by.x = 'House_ID', by.y = 'id')
+library(dplyr)
+
+# Function to perform hot deck imputation
+impute_hot_deck <- function(data, group_vars) {
+  # Find rows with no NAs to be potential donors
+  complete_cases <- data %>% 
+    filter(!if_any(everything(), is.na)) 
+  
+  # For each row with NAs, find a donor from the complete cases
+  imputed_data <- data %>% 
+    rowwise() %>%
+    mutate(across(where(is.numeric), ~ifelse(is.na(.), 
+                                             {
+                                               donor_row <- complete_cases %>% 
+                                                 filter(across(all_of(group_vars), ~.x == cur_data()[[cur_column()]])) %>%
+                                                 sample_n(1)
+                                               if(nrow(donor_row) == 0) NA else donor_row[[cur_column()]]
+                                             }, 
+                                             .), .names = "imputed_{.col}"))
+  
+  # Now combine the original and imputed columns, preferring imputed values when they exist
+  imputed_data <- imputed_data %>%
+    ungroup() %>%
+    mutate(across(contains("imputed"), ~coalesce(., get(gsub("imputed_", "", cur_column()))), .names = "{gsub('imputed_', '', .col)}"))
+
+  # Select only the original columns (with imputed values where they were NA)
+  imputed_data <- imputed_data %>% select(-contains("imputed"))
+
+  return(imputed_data)
+}
+
+impute_hot_deck2 <- function(df, variables_to_impute, group_vars) {
+  # Find rows with no NAs in the columns of interest to be potential donors
+  complete_cases <- df %>%
+    filter(!if_any(all_of(variables_to_impute), is.na)) %>%
+    select(all_of(c(variables_to_impute, group_vars)))
+  
+  # For each row with NAs in the columns of interest, find a donor from the complete cases
+  imputed_data <- df %>%
+    rowwise() %>%
+    mutate(across(all_of(variables_to_impute), ~ if (is.na(.x)) {
+      # Find a donor row that matches the group_vars criteria
+      donor_rows <- complete_cases %>%
+        filter(across(all_of(group_vars), ~ .x == cur_data()[[cur_column()]]))
+      if (nrow(donor_rows) > 0) {
+        # Randomly select one of the donor rows
+        sample(donor_rows[[cur_column()]], 1)
+      } else {
+        # If no donor row found, return NA
+        NA_real_
+      }
+    } else {
+      .x # If not NA, keep the original value
+    }))
+  
+  imputed_data <- ungroup(imputed_data)
+  
+  return(imputed_data)
+}
+
+# Impute the missing values in merged_data
+merged_data_imputed <- impute_hot_deck(merged_data, group_vars = c("base_ac_yn", "hrv_on_yn", "Period"))
+merged_data_imputed
+```
+

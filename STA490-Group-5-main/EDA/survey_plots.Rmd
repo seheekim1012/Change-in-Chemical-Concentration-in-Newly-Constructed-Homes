@@ -1,0 +1,480 @@
+---
+title: "sta490 line plot"
+output: html_document
+date: '2023-11-16'
+---
+
+```{r}
+
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+
+```
+
+```{r}
+FirstPhase <- read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Passive air- PUF(pgm-3)",
+                         range = "A5:O38")
+FirstPhase <- FirstPhase %>% 
+  clean_names() %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0,
+    period == "3 month" ~ 3,
+    period == "6 month" ~ 6,
+    TRUE ~ 9
+  ))
+```
+
+
+
+
+```{r}
+survey_data <- read_excel("20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn,dogcat_yn)
+selected_survey_data <- survey_data[1:44,]
+```
+
+```{r}
+full_data = merge(FirstPhase, selected_survey_data, by.x = 'house_id', by.y='id')
+full_data1 <- full_data %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+```
+
+
+```{r}
+eBzBP <- full_data1 %>% 
+  select(house_id, period, bz_bp, paints_yn, low_VOC_home, dogcat_yn)
+eBzBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = bz_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+eBzBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = bz_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+eBzBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = bz_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+```
+
+
+
+```{r}
+Dehp <- full_data1 %>% 
+  select(house_id, period, dehp, paints_yn, low_VOC_home,dogcat_yn)
+Dehp %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dehp, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dehp in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+Dehp %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dehp, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dehp in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+Dehp %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dehp, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dehp in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+```
+```{r}
+dnop <- full_data1 %>% 
+  select(house_id, period, dn_op, paints_yn, low_VOC_home,dogcat_yn)
+dnop %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_op, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dnop in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+dnop %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_op, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dnop in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+
+dnop %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_op, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dnop in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+```
+```{r}
+DiNP <- full_data1 %>% 
+  select(house_id, period, di_np, paints_yn, low_VOC_home,dogcat_yn)
+DiNP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_np, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiNP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DiNP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_np, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiNP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DiNP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_np, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiNP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+```
+
+```{r}
+DEP <- full_data1 %>% 
+  select(house_id, period, dep, paints_yn, low_VOC_home,dogcat_yn)
+DEP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dep, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DEP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DEP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dep, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DEP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DEP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dep, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DEP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+```
+
+```{r}
+DPP <- full_data1 %>% 
+  select(house_id, period, dpp, paints_yn, low_VOC_home, dogcat_yn)
+DPP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dpp, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DPP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DPP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dpp, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DPP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DPP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dpp, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DPP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+```
+
+```{r}
+DiBP <- full_data1 %>% 
+  select(house_id, period, di_bp, paints_yn, low_VOC_home, dogcat_yn)
+DiBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DiBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DiBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+```
+
+
+```{r}
+DnBP <- full_data1 %>% 
+  select(house_id, period, dn_bp, paints_yn, low_VOC_home, dogcat_yn)
+DnBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DnBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DnBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DnBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DnBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_bp, group = house_id)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DnBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+```
+
+
+```{r}
+Active_GFF <- read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Active air GFF (pgm-3)",
+                         range = "A2:Q30")
+
+```
+
+
+
+```{r}
+full_data_active = merge(Active_GFF, selected_survey_data, by.x = 'House ID', by.y='id')
+```
+
+
+#using active data to check the trend
+```{r}
+
+
+# Ensure that 'Period' is a factor with levels in the correct order
+active_chemical <- full_data_active %>% 
+  select(`House ID`, Period, BzBP,DEHP,DnOP,DiNP,DEP,DPP,DiBP, DnBP, paints_yn, low_VOC_home, dogcat_yn) %>%
+  mutate(Period = factor(Period, levels = c("PRE", "POST")))
+
+# Plotting
+active_chemical %>% 
+  ggplot(aes(x = Period, y = BzBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of BzBP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = BzBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of BzBP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = BzBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of BzBP in active air sample")
+
+
+
+```
+
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DEHP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DEHP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DEHP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DEHP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DEHP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DEHP in active air sample")
+```
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DnOP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DNOP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DnOP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DNOP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DnOP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DNOP in active air sample")
+```
+
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DiNP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DINP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DiNP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DINP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DiNP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DINP in active air sample")
+```
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DEP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DEP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DEP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DEP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DEP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DEP in active air sample")
+```
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DPP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DPP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DPP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DPP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DPP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DPP in active air sample")
+```
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DiBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DINP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DiBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DIBP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DiBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DIBP in active air sample")
+```
+```{r}
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DnBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(paints_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DNBP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DnBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(low_VOC_home))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DNBP in active air sample")
+
+active_chemical %>% 
+  ggplot(aes(x = Period, y = DnBP, group = `House ID`)) +
+  geom_line(aes(color = as.factor(dogcat_yn))) +
+  ylab("Concentration(pg/m3)") + xlab("Period") +
+  ggtitle("Concentration of DNBP in active air sample")
+```
+
+

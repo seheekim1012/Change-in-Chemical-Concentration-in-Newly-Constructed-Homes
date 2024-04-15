@@ -1,0 +1,576 @@
+---
+title: "Exploratory Data Analysis Report for Group 5"
+author: "Daihao Wu, Benjamin He, Seehe Kim, Fred Peng, Tom Xu"
+date: "11/16/2023"
+output: pdf_document
+---
+
+```{r, include = F, echo = FALSE, message = FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+# Will's EDA in Passive air - PUF sheet
+# House ID has already been changed to House_ID and Sample ID has already been changed to Sample_ID; A null values had been refilled;
+full_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", skip = 4)
+```
+
+## Introduction
+
+  Semi-volatile organic compounds (SVOCs) are liquids or solids at lower temperatures, that are commonly found in many common products such as pesticides, oil-based products, fire retardants and building materials. SVOCs can volatilize from surfaces and materials and become airborne, which might be exposed to humans through inhalation, skin contact and food contamination. Recent studies have shown that the presence of materials containing SVOCs in homes lead to higher risk of allergies, respiratory symptoms, diagnosed asthma and birth defects.
+  
+  Building materials, such as paints, adhesives, and wood products may contain SVOCs that can slowly release into the indoor air over time. This release can continue for an extended period after construction or installation. The question of the concentration of SVOCs in newly constructed homes remained unanswered and this poses a health risk to the occupants, so our team’s goal is to determine the levels of SVOCs in newly built homes and measure the chemical levels over a period of time after occupants move in. We hope that our research results can contribute to safety measurements and home development regulations.
+  
+  Therefore, this paper serves as the foundational analysis for investigating the concentrations of Semi-volatile Organic Compounds (SVOCs) in newly constructed homes. As our team delves into the exploratory data analysis of the provided dataset, we aim to unravel the levels of SVOCs and track their variations over time following the occupancy of these homes.
+  
+### Research Question
+
+*How does the concentration of Semi-volatile organic compounds (SVOCs) change before and after occupants move into newly constructed homes, and what are some potential factors contributing to that change?*
+
+## Data
+
+Our data set mainly consists of 3 Excel spreadsheets as follows: ”NHS_2023_Data_October_31_University of Toronto_First phase.xlsx”, “20231027_Technician Survey Data.xlsx” and “20231027_0-12 Month Questionnaire Data.xlsx”.
+
+### SVOCs Concentration Data:
+
+”NHS_2023_Data_October_31_University of Toronto_First phase.xlsx” 
+
+The concentration data spreadsheet contains the concentration levels of up to 69 different SVOCs. The data was collected using different methods, including using active samplers, passive samplers, wiping and dusting. Thus, these corresponding SVOCs collected via different methods are separated by sheets. For the passive sampler, wipe sampler and dust sampler, the data collection interval was every three months after move-in up to nine months. For the active sampler, data was collected right before move-in and right after move-in in the newly constructed homes. However, due to COVID-19, many participating houses were unable to complete sampling for the 9-month interval after move-in. As a result, only 3 houses have complete data for the SVOCs in the Phthalates (PAEs) family through passive and wiping data collection methods.
+
+### Technical Data:
+
+“20231027_Technician Survey Data.xlsx”
+
+The technician survey data spreadsheet contains the technical details of those newly constructed homes that participated in the research recorded by the survey technicians. It contains several significant attributes such as the number of bedrooms, the number of bathrooms, the size of windows, the size of rooms, type of heating, construction material etc. There is another document (EN-Technician Survey - FINAL_coding_v2.docx) that explains the coding for the response and variables in the technical survey data. There are in total 50 homes recorded in the technical data with some missing data points at different technical variables. This spreadsheet provides data to support analysis of how the building/home itself can affect the SVOC levels.
+
+### Questionnaire Data:
+
+ “20231027_0-12 Month Questionnaire Data.xlsx”
+
+The questionnaire data spreadsheet contains the survey results that were completed by the survey participants. The data mainly consists of personal details in the surveyed houses, daily habits, personal behaviours, furniture details etc. There are two other documents (EN-0 month Visit Questionnaire_coding.docx/ EN-3-12 month Visit Questionnaire_coding.docx) that explain the coding for the response and variables in the questionnaire survey data. There are in total 44 homes recorded in the data spreadsheet with some missing data points at different survey variables. This spreadsheet provides data to support analysis on how human activity can affect the SVOC levels.
+
+## Data Preprocessing:
+
+To prepare for the data exploratory process, we imported the passive/active air datasheet from the concentration dataset as well as the questionnaire dataset. We converted the “Period” column, which represents the time interval the concentration is recorded, to reflect type numeric instead of string. We then merged the selected variables/columns from the technical survey data with the concentration data into a full dataset named “full_data”.
+
+The selected variables from technical survey data are as follows:
+
+\vspace{5pt}
+
+“id”: the unique house ID for each participating newly constructed home; equivalent to “House ID” in the concentration dataset
+
+“base_ac_yn”: indication of if the home has air conditioning (0/1)
+
+“heating_type”: the type of heating system used in the home
+
+“cellulose_ins_yn”:  indication of if the home uses Cellulose as insulation material (0/1)
+
+“styrofoam_ins_yn”:  indication of if the home uses Styrofoam (polystyrene) as insulation material (0/1)
+
+“fiberglass_ins_yn”:  indication of if the home uses Fiberglass as insulation material (0/1)
+
+“sprayfoam_ins_yn”:  indication of if the home uses Spray polyurethane foam as insulation material (0/1)
+
+“base_ij_osb_yn”:  indication of if the home has I-joists or oriented strand board (OSB) panels exposed in the basement (0/1)
+
+“Ukc1_mat”: the material that the upper kitchen cabinetry is made of
+
+“lkc_mat”:  the material that the lower kitchen cabinetry is made of
+
+”hrv_on_yn”: indication of if the home has HRV or ERV turned on
+
+\vspace{5pt}
+
+Similarly, we then further merge the selected variables/columns from the Questionnaire data with the “full_data”, and the selected variables from the survey data are as follows:
+
+\vspace{5pt}
+
+“id”: the unique house ID for each participating newly constructed home; equivalent to “House ID” in the concentration dataset
+
+“low_VOC_home”: indication of if the home is marketed as using low volatile organic compound (0/1/-7)
+
+“dogcat_yn”: indication of if the owner keeps dogs or cats as pets inside the home (0/1)
+
+\vspace{5pt}
+
+Thus, we have the complete “full_data” with significant variables from technical and questionnaire datasets. We further converted all the concentrations from type string to numeric for analysis and graphical purposes. However, in our “full_data”, most chemicals had missing data or data that was lower than the detection level, we chose to do an analysis on Phthalates (PAEs) in the beginning stage as they had complete data across all the homes at recorded intervals. A new dataset “data_complete_month” was created to only contain the houses with ID “NHAQS-001”, “NHAQS-002” and “NHAQS-003” since they were the only houses in the passive sampler that had complete sampling data. Thus, we could take further exploration of our passive air samples, and see if there are any relationships between the PAE concentrations and human behavior or technical details of the homes.
+
+```{r, include = F, echo = FALSE}
+# filter to only for the houses
+full_data <- full_data[c(1:33), ]
+
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, TRUE ~ 9))
+
+#Convert all number strings to numeric
+full_data$DEP <- as.numeric(full_data$DEP)
+full_data$DPP <- as.numeric(full_data$DPP)
+full_data$DiBP <- as.numeric(full_data$DiBP)
+full_data$DnBP <- as.numeric(full_data$DnBP)
+full_data$BzBP <- as.numeric(full_data$BzBP)
+full_data$DEHP <- as.numeric(full_data$DEHP)
+full_data$DnOP <- as.numeric(full_data$DnOP)
+full_data$DiNP <- as.numeric(full_data$DiNP)
+
+data_complete_month = full_data %>% filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003")
+
+```
+
+### Data Structure of PAEs
+
+  As discussed earlier, because the chemical elements belonging to Phthalates(PAEs) family have relatively more complete information for the participating homes, so in the early stage of our analysis would only involve PAEs. Therefore, it is essential to look into the data structure of the PAEs, which are in total eight chemicals as follows: DEP, DPP, DiBP, DnBP, BzBP, DEHP, DnOP, DiNP.
+  
+#### Fig 1, Concentration distribution graph for each chemical in PAEs
+
+```{r, echo=FALSE, fig.align='center'}
+
+## histogram of Those eight chemical compounds
+# Adjusting the margins and size of the plotting area
+par(mfrow = c(4, 2), mar = c(4, 4, 2, 1))
+hist(full_data$DEP, main = "Concentration Distribution for DEP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$DPP, main = "Concentration Distribution for DPP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$DiBP, main = "Concentration Distribution for DiBP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$DnBP, main = "Concentration Distribution for DnBP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$BzBP, main = "Concentration Distribution for BzBP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$DEHP, main = "Concentration Distribution for DEHP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$DnOP, main = "Concentration Distribution for DnOP", xlab = 'Concentrations', ylab = 'Density')
+hist(full_data$DiNP, main = "Concentration Distribution for DiNP", xlab = 'Concentrations', ylab = 'Density')
+
+## Create a summary statistics of all these eight chemical compounds
+
+chemicals <- c("DEP", "DPP", "DiBP", "DnBP", "BzBP", "DEHP", "DnOP", "DiNP")
+```
+From the above density graph for each chemicals, we could notice that all of distribution are heavily right skewed except for the distribution graph for DiBP. It suggests that there are many outliers and unusual patterns in the concentration of these elements, so we need to be careful about this characteristic during modelling.
+
+```{r, echo=FALSE}
+
+
+library(knitr)
+
+
+# Set the title
+table_title <- "Summary Statistics for Phthalates(PAEs)"
+
+
+# Initialize an empty data frame
+summary_table <- data.frame(Chemical = character(), 
+                            Min = double(), 
+                            Max = double(), 
+                            Mean = double(), 
+                            Median = double(), 
+                            SE = double(), 
+                            stringsAsFactors = FALSE)
+
+# Loop through each chemical
+for (chem in chemicals) {
+  chem_data <- full_data[[chem]]
+  chem_summary <- c(
+    Chemical = chem,
+    Min = min(chem_data),
+    Max = max(chem_data),
+    Mean = round(mean(chem_data)),
+    Median = median(chem_data),
+    SE = round(sd(chem_data) / sqrt(length(chem_data)))
+  )
+  summary_table <- rbind(summary_table, chem_summary)
+}
+
+# Add the first row with statistics names
+colnames(summary_table) <- c("Statistics", "Min", "Max", "Mean", "Median", "SE")
+rownames(summary_table) <- NULL
+
+# Print the summary table using kable with a title
+kable(summary_table, "markdown", caption = table_title)
+
+```
+  The above summary table for each chemical reveals the central tendency, spread, and variability, providing insights into the distribution of data in the dataset. It also helps identify potential outliers and informs further exploratory data analysis (EDA) and modeling decisions. One key note from this summary table is that the range of concentrations varies widely for each chemical, indicating substantial variability in our chemical concentrations.
+  
+  
+  
+BEN's WORK AFTER THIS________________
+
+
+```{r, echo = FALSE}
+dep_plot = ggplot(full_data, aes(x = Period, y = DEP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", color = "House ID") +
+  ggtitle("DEP Concentration versus Month for Different Homes")
+
+## Plot the graph of the houses with complete data
+p = ggplot(data_complete_month, aes(x = Period, y = DEP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", color = "House ID") +
+  ggtitle("DEP versus Month for Different Homes")
+
+## Added the date on the 0 month
+start_date_data <- data_complete_month[data_complete_month$Period == 0,]
+
+p = p + geom_text(
+  aes(label = `Start date (yyyy-mm-dd)`),
+  data = start_date_data,
+  hjust = 0,  # Adjust the horizontal position of the label
+  vjust = 1,  # Adjust the vertical position of the label
+  show.legend = FALSE
+)
+
+dpp_plot = ggplot(data_complete_month, aes(x = Period, y = DPP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", color = "House ID") +
+  ggtitle("DPP versus Month for Different Homes")
+
+dibp_plot = ggplot(data_complete_month, aes(x = Period, y = DiBP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", color = "House ID") +
+  ggtitle("DiBP versus Month for Different Homes")
+
+dnbp_plot = ggplot(data_complete_month, aes(x = Period, y = DnBP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", color = "House ID") +
+  ggtitle("DnBP versus Month for Different Homes")
+
+grid.arrange(dep_plot, p, nrow = 2)
+grid.arrange(dpp_plot, dibp_plot,dnbp_plot, nrow = 3)
+#END
+```
+
+```{r, echo = FALSE, include = FALSE}
+#Fred's EDA
+concentration_data = read_excel("NHS_2023_Data_October_31_University of Toronto_First phase_modified_Will.xlsx", sheet = "Passive air- PUF(pgm-3)", skip = 4)
+tech_survey_data = read_excel("20231027_Technician Survey Data.xlsx")
+#head(concentration_data)
+#head(tech_survey_data)
+tech_survey_data <- tech_survey_data %>% select(id, base_ac_yn, heating_type, cellulose_ins_yn, Styrofoam_ins_yn, fiberglass_ins_yn, sprayfoam_ins_yn, base_ij_osb_yn, ukc1_mat, lkc_mat, hrv_on_yn)
+full_data = merge(concentration_data, tech_survey_data, by.x = 'House_ID', by.y='id')
+#head(full_data)
+library(ggplot2)
+
+# filter to only for the houses
+full_data <- full_data[c(1:33), ]
+
+# Change the period from text to numerical data
+full_data = full_data %>% mutate(Period = case_when(Period == "0 month" ~ 0, Period == "3 month" ~ 3, Period == "6 month" ~ 6, Period == "9 month" ~ 9))
+
+#head(full_data)
+
+
+
+# ggplot(full_data, aes(x = Period, y = DEP, color = as.factor(House_ID), group = as.factor(House_ID))) +
+#   geom_line() +
+#   labs(x = "Month", y = "Concentration", color = "House ID") +
+#   ggtitle("Concentration versus Month for Different Homes")
+
+data_complete_month = full_data %>% filter(House_ID == "NHAQS-001" | House_ID == "NHAQS-002" | House_ID == "NHAQS-003" | House_ID == "NHAQS-006" | House_ID == "NHAQS-008")
+
+## Plot the graph of the houses with complete data
+dep_plot2 = ggplot(data_complete_month, aes(x = Period, y = DEP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DEP versus Month for Different Homes with corresponding usage of air conditioning")
+#The start date of the houses did not seem to be a factor for the difference in the trend.
+
+## Added the date on the 0 month
+start_date_data <- data_complete_month[data_complete_month$Period == 0,]
+
+dep_plot2 = dep_plot2 + geom_text(
+  aes(label = `Start date (yyyy-mm-dd)`),
+  data = start_date_data,
+  hjust = 0,  # Adjust the horizontal position of the label
+  vjust = 1,  # Adjust the vertical position of the label
+  show.legend = FALSE
+)
+
+dpp_plot2 = ggplot(data_complete_month, aes(x = Period, y = DPP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DPP versus Month for Different Homes")
+
+dibp_plot2 = ggplot(data_complete_month, aes(x = Period, y = DiBP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DiBP versus Month for Different Homes")
+
+dnbp_plot2 = ggplot(data_complete_month, aes(x = Period, y = DnBP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air conditioning") +
+  ggtitle("DnBP versus Month for Different Homes")
+
+bzbp_plot2 = ggplot(data_complete_month, aes(x = Period, y = BzBP, group = House_ID)) +
+  geom_line(aes(linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn))) +
+  scale_x_continuous(breaks = c(0,3,6,9)) +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("BzBP versus Month for Different Homes")
+
+dehp_plot2 = ggplot(data_complete_month, aes(x = Period, y = DEHP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DEHP versus Month for Different Homes")
+
+dnop_plot2 = ggplot(data_complete_month, aes(x = Period, y = DnOP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DnOP versus Month for Different Homes")
+
+dinp_plot2 = ggplot(data_complete_month, aes(x = Period, y = DiNP, linetype=as.factor(hrv_on_yn), color = as.factor(base_ac_yn), group = as.factor(House_ID))) +
+  geom_line() +
+  labs(x = "Month", y = "Concentration", linetype = "Heat Recovery Ventilator", color = "Air Conditioning") +
+  ggtitle("DiNP versus Month for Different Homes")
+
+dep_plot2
+grid.arrange(dpp_plot2, dibp_plot2, dnbp_plot2, nrow = 2, ncol = 2)
+grid.arrange(bzbp_plot2, dehp_plot2, dnop_plot2, dinp_plot2, nrow = 2, ncol = 2)
+
+#END
+```
+
+```{r, include = FALSE}
+# Calculate the CCF between different chemicals
+
+# filter to only for the houses
+full_data <- full_data[c(1:33), ] %>% 
+  clean_names()
+
+# Change the period from text to numerical data
+full_data <- full_data %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0, 
+    period == "3 month" ~ 3, 
+    period == "6 month" ~ 6, 
+    TRUE ~ 9))
+
+# contains only houses with complete month
+data_complete_month <- full_data %>% 
+  filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" |house_id == "NHAQS-003")
+
+house1 = data_complete_month %>% filter(house_id == "NHAQS-001")
+f <- function(house) {
+  house <- house[order(house$period), ]
+  
+  DEP = as.numeric(house$dep)
+  DPP = as.numeric(house$dpp)
+  DiBP = as.numeric(house$di_bp)
+  DnBP = as.numeric(house$dn_bp)
+  BzBP = as.numeric(house$bz_bp)
+  DEHP = as.numeric(house$dehp)
+  DnOP = as.numeric(house$dn_op)
+  DiNP = as.numeric(house$di_np)
+  
+  ccf(DEP, DPP, type= "correlation")
+  ccf(DEP, DiBP)
+  ccf(DEP, DnBP)
+  ccf(DEP, BzBP)
+  ccf(DEP, DEHP)
+  ccf(DEP, DnOP)
+  ccf(DEP, DiNP)
+  
+  ccf(DPP, DiBP)
+  ccf(DPP, DnBP)
+  ccf(DPP, BzBP)
+  ccf(DPP, DEHP)
+  ccf(DPP, DnOP)
+  ccf(DPP, DiNP)
+
+  ccf(DiBP, DnBP)
+  ccf(DiBP, BzBP)
+  ccf(DiBP, DEHP)
+  ccf(DiBP, DnOP)
+  ccf(DiBP, DiNP)
+  ccf(DnBP, BzBP)
+  ccf(DnBP, DEHP)
+  ccf(DnBP, DnOP)
+  ccf(DnBP, DiNP)
+  
+  ccf(BzBP, DEHP)
+  ccf(BzBP, DnOP)
+  ccf(BzBP, DiNP)
+  ccf(DEHP, DnOP)
+  ccf(DEHP, DiNP)
+  ccf(DnOP, DiNP)
+}
+par(mfrow = c(3,2))
+f(house1)
+```
+
+```{r, include = FALSE}
+house2 = data_complete_month %>% filter(house_id == "NHAQS-002")
+f(house2)
+```
+
+```{r, include = FALSE}
+house3 = data_complete_month %>% filter(house_id == "NHAQS-003")
+f(house3)
+```
+
+
+```{r, echo = FALSE, include = FALSE}
+## Read data in first phase only for the first group
+FirstPhase <- read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Passive air- PUF(pgm-3)",
+                         range = "A5:O38")
+FirstPhase <- FirstPhase %>% 
+  clean_names() %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0,
+    period == "3 month" ~ 3,
+    period == "6 month" ~ 6,
+    TRUE ~ 9
+  ))
+
+##for BzBP
+FirstPhaseBzBP <- FirstPhase %>% 
+  select(house_id, period, bz_bp)
+bzbp_plot3 = FirstPhaseBzBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = bz_bp, group = house_id)) +
+  geom_line(aes(color = house_id)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+#For DEHP
+FirstPhaseDEHP <- FirstPhase %>% 
+  select(house_id, period, dehp)
+dehp_plot3 = FirstPhaseDEHP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dehp, group = house_id)) +
+  geom_line(aes(color = house_id)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("period(months)") +    
+  ggtitle("Concentration of DEHP in passive air sample", #subtitle = "Houses with complete period only"
+          )
+
+#For DnOP; graph of all the houses and graph of only houses with complete sample
+FirstPhaseDnOP <- FirstPhase %>% 
+  select(house_id, period, dn_op)
+dnop_plot3 = FirstPhaseDnOP %>% 
+  filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_op, group = house_id)) +
+  geom_line(aes(color = house_id)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("period(months)") +    
+  ggtitle("Concentration of DnOP in passive air sample", subtitle = "Houses with complete period only"
+  )
+
+
+#For DiNP
+FirstPhaseDiNP <- FirstPhase %>% 
+  select(house_id, period, di_np)
+dinp_plot3 = FirstPhaseDiNP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_np, group = house_id)) +
+  geom_line(aes(color = house_id)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concentration(pg/m3)") + xlab("period(months)") +    
+  ggtitle("Concentration of DiNP in passive air sample", #subtitle = "Houses with complete period only"
+  )
+
+grid.arrange(bzbp_plot3, dehp_plot3, dnop_plot3, dinp_plot3, nrow = 2, ncol = 2)
+```
+
+```{r, echo=FALSE, include = FALSE}
+FirstPhase <- read_excel("NHS_2023_Data_October_31_University of Toronto_First phase.xlsx", 
+                         sheet = "Passive air- PUF(pgm-3)",
+                         range = "A5:O38")
+FirstPhase <- FirstPhase %>% 
+  clean_names() %>% 
+  mutate(period = case_when(
+    period == "0 month" ~ 0,
+    period == "3 month" ~ 3,
+    period == "6 month" ~ 6,
+    TRUE ~ 9
+  ))
+
+survey_data <- read_excel("20231027_0-12 Month Questionnaire Data.xlsx") %>% select(id, low_VOC_home, paints_yn)
+selected_survey_data <- survey_data[1:44,]
+
+full_data = merge(FirstPhase, selected_survey_data, by.x = 'house_id', by.y='id')
+full_data1 <- full_data %>% 
+  mutate(low_VOC_home = ifelse(is.na(low_VOC_home), 0, low_VOC_home)) %>% mutate(paints_yn = ifelse(is.na(paints_yn), 0, paints_yn))
+
+eBzBP <- full_data1 %>% 
+  select(house_id, period, bz_bp, paints_yn, low_VOC_home)
+ebzbp_plot4 = eBzBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = bz_bp, group = house_id)) +
+  geom_line(aes(color = paints_yn)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+ebzbp_plot5 = eBzBP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = bz_bp, group = house_id)) +
+  geom_line(aes(color = low_VOC_home)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of BzBP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+Dehp <- full_data1 %>% 
+  select(house_id, period, dehp, paints_yn, low_VOC_home)
+dehp_plot4 = Dehp %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dehp, group = house_id)) +
+  geom_line(aes(color = paints_yn)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dehp in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+dehp_plot5 = Dehp %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dehp, group = house_id)) +
+  geom_line(aes(color = low_VOC_home)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dehp in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+dnop <- full_data1 %>% 
+  select(house_id, period, dn_op, paints_yn, low_VOC_home)
+dnop_plot4 = dnop %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_op, group = house_id)) +
+  geom_line(aes(color = paints_yn)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dnop in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+dnop_plot5 = dnop %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = dn_op, group = house_id)) +
+  geom_line(aes(color = low_VOC_home)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of dnop in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+DiNP <- full_data1 %>% 
+  select(house_id, period, di_np, paints_yn, low_VOC_home)
+dinp_plot4 =DiNP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_np, group = house_id)) +
+  geom_line(aes(color = paints_yn)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiNP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+
+dinp_plot5 =DiNP %>% 
+  #filter(house_id == "NHAQS-001" | house_id == "NHAQS-002" | house_id == "NHAQS-003") %>% 
+  ggplot(aes(x = period, y = di_np, group = house_id)) +
+  geom_line(aes(color = low_VOC_home)) +
+  scale_x_continuous(breaks = c(0,3,6,9))+
+  ylab("Concetration(pg/m3)") + xlab("period (months)") +
+  ggtitle("Concentraion of DiNP in passive air sample", #subtitle = "Houses with complete period only"
+         )
+grid.arrange(ebzbp_plot4, ebzbp_plot5, dehp_plot4, dehp_plot5, nrow = 2, ncol = 2)
+
+grid.arrange(dnop_plot4, dnop_plot5, dinp_plot4, dinp_plot5, nrow = 2, ncol = 2)
+
+```
